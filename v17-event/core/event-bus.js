@@ -1,12 +1,9 @@
-// core/event-bus.js - 중앙 이벤트 시스템 (개선된 버전)
+// core/event-bus.js - 중앙 이벤트 시스템 (동기 처리 버전)
 
 class EventBus {
     constructor() {
         this.events = new Map();
-        this.eventQueue = [];
-        this.processing = false;
         this.eventId = 0;
-        this.batchSize = 100; // 배치 처리 크기
         this.metrics = {
             totalEvents: 0,
             processedEvents: 0,
@@ -71,10 +68,10 @@ class EventBus {
     }
     
     /**
-     * 이벤트 발행
+     * 이벤트 발행 (동기 처리)
      * @param {string} eventType 
      * @param {Object} data 
-     * @param {Object} options - { immediate: boolean }
+     * @param {Object} options - 호환성을 위해 유지하지만 사용하지 않음
      */
     emit(eventType, data = {}, options = {}) {
         if (this.destroyed) {
@@ -82,10 +79,8 @@ class EventBus {
             return;
         }
         
-        const { immediate = false } = options;
-        
-        // 구독자가 없으면 조기 종료 (성능 최적화)
-        if (!this.hasHandlers(eventType) && !immediate) {
+        const handlers = this.events.get(eventType);
+        if (!handlers || handlers.length === 0) {
             return;
         }
         
@@ -103,151 +98,39 @@ class EventBus {
             (this.metrics.eventCounts.get(eventType) || 0) + 1
         );
         
-        if (immediate) {
-            // 즉시 처리
-            this.processEvent(event);
-        } else {
-            // 큐에 추가
-            this.eventQueue.push(event);
-            
-            if (!this.processing) {
-                this.processQueue();
-            }
-        }
-    }
-    
-    /**
-     * 이벤트 큐 처리 (배치 처리 지원)
-     */
-    async processQueue() {
-        if (this.processing || this.eventQueue.length === 0) {
-            return;
-        }
+        // 핸들러 복사본 생성 (once 처리를 위해)
+        const handlersToProcess = [...handlers];
         
-        this.processing = true;
-        
-        try {
-            while (this.eventQueue.length > 0) {
-                // 배치 추출
-                const batch = this.eventQueue.splice(0, this.batchSize);
-                
-                // 배치 처리
-                await this.processBatch(batch);
-                
-                // CPU 양보
-                if (this.eventQueue.length > 0) {
-                    await new Promise(resolve => setTimeout(resolve, 0));
-                }
-            }
-        } finally {
-            this.processing = false;
-        }
-    }
-    
-    /**
-     * 배치 처리
-     * @param {Array} batch - 이벤트 배열
-     */
-    async processBatch(batch) {
-        // 이벤트 타입별로 그룹화
-        const groupedEvents = new Map();
-        
-        batch.forEach(event => {
-            if (!groupedEvents.has(event.type)) {
-                groupedEvents.set(event.type, []);
-            }
-            groupedEvents.get(event.type).push(event);
-        });
-        
-        // 타입별로 병렬 처리
-        const promises = [];
-        
-        for (const [eventType, events] of groupedEvents) {
-            const handlers = this.events.get(eventType);
-            if (!handlers || handlers.length === 0) continue;
-            
-            // 동일 타입의 이벤트들을 순차 처리
-            const promise = this.processEventGroup(events, handlers);
-            promises.push(promise);
-        }
-        
-        await Promise.all(promises);
-    }
-    
-    /**
-     * 이벤트 그룹 처리
-     * @param {Array} events - 동일 타입의 이벤트들
-     * @param {Array} handlers - 핸들러 배열
-     */
-    async processEventGroup(events, handlers) {
-        for (const event of events) {
-            await this.executeHandlers(event, [...handlers]);
-        }
-    }
-    
-    /**
-     * 단일 이벤트 처리
-     * @param {Object} event - 이벤트 객체
-     */
-    processEvent(event) {
-        const handlers = this.events.get(event.type);
-        if (handlers && handlers.length > 0) {
-            this.executeHandlers(event, [...handlers]);
-        }
-    }
-    
-    /**
-     * 핸들러 실행
-     * @param {Object} event - 이벤트 객체
-     * @param {Array} handlers - 핸들러 배열
-     */
-    async executeHandlers(event, handlers) {
-        const toRemove = [];
-        
-        for (const handlerInfo of handlers) {
+        // 동기 처리
+        handlersToProcess.forEach(handlerInfo => {
             try {
-                await handlerInfo.handler(event);
+                // once 옵션 처리
+                if (handlerInfo.once) {
+                    const index = handlers.findIndex(h => h.id === handlerInfo.id);
+                    if (index !== -1) {
+                        handlers.splice(index, 1);
+                    }
+                }
+                
+                // 핸들러 실행
+                handlerInfo.handler(event);
                 this.metrics.processedEvents++;
                 
-                // once 옵션인 경우 제거 대상에 추가
-                if (handlerInfo.once) {
-                    toRemove.push(handlerInfo.id);
-                }
             } catch (error) {
                 this.metrics.failedEvents++;
-                console.error(`Error in handler for ${event.type}:`, error);
-                
-                // 에러 이벤트 발생
-                if (event.type !== 'error') {
-                    this.emit('error', {
-                        originalEvent: event,
-                        error: error.message,
-                        stack: error.stack
-                    }, { immediate: true });
-                }
+                console.error(`Error in handler for ${eventType}:`, error);
             }
-        }
-        
-        // once 핸들러 제거
-        if (toRemove.length > 0) {
-            const currentHandlers = this.events.get(event.type);
-            if (currentHandlers) {
-                this.events.set(
-                    event.type,
-                    currentHandlers.filter(h => !toRemove.includes(h.id))
-                );
-            }
-        }
+        });
     }
     
     /**
-     * 이벤트 대기
+     * 특정 이벤트 대기
      * @param {string} eventType - 대기할 이벤트 타입
-     * @param {Function} condition - 조건 함수 (선택적)
-     * @param {number} timeout - 타임아웃 (밀리초)
+     * @param {Function} predicate - 조건 함수 (선택적)
+     * @param {number} timeout - 타임아웃 (ms)
      * @returns {Promise} 이벤트 데이터
      */
-    waitFor(eventType, condition = null, timeout = 5000) {
+    waitFor(eventType, predicate = null, timeout = 5000) {
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
                 unsubscribe();
@@ -255,15 +138,9 @@ class EventBus {
             }, timeout);
             
             const unsubscribe = this.once(eventType, (event) => {
-                if (!condition || condition(event)) {
+                if (!predicate || predicate(event)) {
                     clearTimeout(timer);
                     resolve(event);
-                } else {
-                    // 조건이 맞지 않으면 다시 대기
-                    unsubscribe();
-                    this.waitFor(eventType, condition, timeout - (Date.now() - event.timestamp))
-                        .then(resolve)
-                        .catch(reject);
                 }
             });
         });
@@ -291,7 +168,6 @@ class EventBus {
         } else {
             this.events.clear();
         }
-        this.eventQueue = [];
     }
     
     /**
@@ -301,7 +177,6 @@ class EventBus {
     getMetrics() {
         return {
             ...this.metrics,
-            queueLength: this.eventQueue.length,
             handlerCounts: Array.from(this.events.entries()).map(([type, handlers]) => ({
                 type,
                 count: handlers.length
@@ -322,14 +197,6 @@ class EventBus {
     }
     
     /**
-     * 배치 크기 설정
-     * @param {number} size - 배치 크기
-     */
-    setBatchSize(size) {
-        this.batchSize = Math.max(1, size);
-    }
-    
-    /**
      * 이벤트 타입 존재 여부 확인
      * @param {string} eventType - 이벤트 타입
      * @returns {boolean}
@@ -338,14 +205,13 @@ class EventBus {
         const handlers = this.events.get(eventType);
         return handlers && handlers.length > 0;
     }
+    
     /**
      * 이벤트 버스 종료
      */
     destroy() {
         this.destroyed = true;
         this.clear();
-        this.eventQueue = [];
-        this.processing = false;
     }
 }
 

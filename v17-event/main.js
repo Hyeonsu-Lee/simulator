@@ -64,41 +64,46 @@ class SimulationController {
             const character = this.characterLoader.createCharacter(characterId, charConfig);
             
             if (character) {
-                const staticBuffs = {
-                    ...this.configManager.calculateOverloadBuffs(),
-                    ...this.getCubeBuffs()
+                const staticBuffs = this.configManager.calculateOverloadBuffs();
+                const cubeBuffs = this.getCubeBuffs();
+                const totalStaticBuffs = {
+                    ...staticBuffs,
+                    ...cubeBuffs
                 };
                 
                 console.log(`[SimulationController] Static buffs for ${characterId}:`, staticBuffs);
+                console.log(`[SimulationController] Total buffs for ${characterId}:`, totalStaticBuffs);
                 
-                const buffs = this.buffSystem.calculateTotalBuffs(characterId, staticBuffs);
+                // 버프 시스템을 통해 계산
+                const buffs = this.buffSystem.calculateTotalBuffs(characterId, totalStaticBuffs);
                 
-                console.log(`[SimulationController] Total buffs for ${characterId}:`, buffs);
-                
-                const collectionBonus = this.damageCalculator.getCollectionBonus(character.weaponType);
-                const maxAmmo = Math.floor(character.baseStats.baseAmmo * 
-                    (1 + buffs.maxAmmo + collectionBonus.maxAmmo));
-                
-                const characterState = {
-                    id: characterId,
-                    characterSpec: characterId,
-                    currentAmmo: maxAmmo,
-                    maxAmmo: maxAmmo,
-                    attackCount: 0,
-                    shotsFired: 0,
-                    pelletsHit: 0,
-                    totalDamage: 0,
-                    coreHitCount: 0,
-                    critCount: 0,
-                    totalPellets: 0,
-                    reloadCount: 0,
-                    skill1Count: 0,
-                    replaceAttack: null
-                };
-                
-                console.log(`[SimulationController] Character state for ${characterId}:`, characterState);
-                
-                this.stateStore.set(`combat.characters.${characterId}`, characterState);
+                // StateStore 업데이트
+                this.stateStore.update(state => {
+                    const collection = this.damageCalculator.getCollectionBonus(character.weaponType);
+                    const maxAmmo = Math.floor(character.baseStats.baseAmmo * 
+                        (1 + (buffs.maxAmmo || 0) + (collection.maxAmmo || 0)));
+                    
+                    state.combat.characters[characterId] = {
+                        baseAmmo: character.baseStats.baseAmmo,
+                        maxAmmo: maxAmmo,
+                        currentAmmo: maxAmmo,
+                        shotsFired: 0,
+                        attackCount: 0,
+                        totalDamage: 0,
+                        coreHitCount: 0,
+                        critCount: 0,
+                        totalPellets: 0,
+                        pelletsHit: 0,
+                        reloadCount: 0,
+                        skill1Count: 0,
+                        replaceAttack: null
+                    };
+                    
+                    console.log(`[SimulationController] Character state for ${characterId}:`, 
+                        state.combat.characters[characterId]);
+                    
+                    return state;
+                });
             } else {
                 console.error(`[SimulationController] Failed to create character ${characterId}`);
             }
@@ -290,15 +295,6 @@ class SimulationController {
      * 큐브 버프 가져오기
      */
     getCubeBuffs() {
-        const CUBE_DATA = {
-            reload: {
-                name: "재장전 큐브",
-                effects: {
-                    reloadSpeed: 0.15
-                }
-            }
-        };
-        
         const cubeType = this.configManager.config.simulation.cubeType;
         if (!cubeType || !CUBE_DATA[cubeType]) {
             return {};
@@ -325,52 +321,43 @@ class SimulationController {
         const avgDPS = Math.floor(results.reduce((sum, r) => sum + r.dps, 0) / results.length);
         
         this.logger.buff(this.timeManager.currentTime,
-            `[시뮬레이션 완료] 평균 DPS: ${this.formatNumber(avgDPS)}`,
+            `[시뮬레이션 완료] 평균 DPS: ${avgDPS.toLocaleString('ko-KR')}`,
             'buff'
         );
-    }
-    
-    /**
-     * 숫자 포맷팅 (유틸)
-     */
-    formatNumber(num) {
-        if (typeof num !== 'number') return '0';
-        return Math.floor(num).toLocaleString('ko-KR');
     }
 }
 
 // 애플리케이션 초기화
 async function initializeApplication() {
-    console.log('Initializing Nikke Simulator...');
-    
     try {
-        // 보안 코드
-        document.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            return false;
-        });
+        console.log('Initializing Nikke Simulator...');
         
-        // 1. 코어 시스템 초기화
-        const eventBus = new EventBus();
+        // 1. 전역 eventBus 먼저 생성 (중요!)
+        window.eventBus = new EventBus();
+        
+        // 2. 코어 시스템 초기화
         const stateStore = new StateStore(initialState); // initialState는 state-store.js에서 export됨
         const timeManager = new TimeManager();
         const logger = new Logger();
         
-        // 2. 인프라 초기화
+        // 전역 노출 (TimeManager에서 사용)
+        window.timeManager = timeManager;
+        
+        // 3. 인프라 초기화
         const characterLoader = new CharacterLoader();
         const configManager = new ConfigManager();
         
-        // 3. 미디에이터 초기화
-        const mediator = new EventMediator(eventBus);
+        // 4. 미디에이터 초기화
+        const mediator = new EventMediator(window.eventBus);
         
-        // 4. 도메인 시스템 생성 (의존성 주입)
+        // 5. 도메인 시스템 생성 (의존성 주입)
         const damageCalculator = new DamageCalculator({
-            eventBus,
+            eventBus: window.eventBus,
             mediator
         });
         
         const buffSystem = new BuffSystem({
-            eventBus,
+            eventBus: window.eventBus,
             mediator,
             stateStore,
             timeManager,
@@ -378,7 +365,7 @@ async function initializeApplication() {
         });
         
         const skillSystem = new SkillSystem({
-            eventBus,
+            eventBus: window.eventBus,
             mediator,
             stateStore,
             timeManager,
@@ -387,7 +374,7 @@ async function initializeApplication() {
         });
         
         const combatSystem = new CombatSystem({
-            eventBus,
+            eventBus: window.eventBus,
             mediator,
             stateStore,
             timeManager,
@@ -396,9 +383,9 @@ async function initializeApplication() {
             configManager
         });
         
-        // 5. UI 시스템 생성 (의존성 주입)
+        // 6. UI 시스템 생성 (의존성 주입)
         const uiController = new UIController({
-            eventBus,
+            eventBus: window.eventBus,
             stateStore,
             characterLoader,
             configManager,
@@ -407,9 +394,9 @@ async function initializeApplication() {
         
         const simulationView = new SimulationView();
         
-        // 6. 컨트롤러 생성
+        // 7. 컨트롤러 생성
         const simulationController = new SimulationController({
-            eventBus,
+            eventBus: window.eventBus,
             mediator,
             stateStore,
             timeManager,
@@ -424,8 +411,8 @@ async function initializeApplication() {
             simulationView
         });
         
-        // 7. 의존성 컨테이너에 등록
-        container.register('eventBus', eventBus);
+        // 8. 의존성 컨테이너에 등록
+        container.register('eventBus', window.eventBus);
         container.register('mediator', mediator);
         container.register('stateStore', stateStore);
         container.register('timeManager', timeManager);
@@ -440,21 +427,21 @@ async function initializeApplication() {
         container.register('simulationView', simulationView);
         container.register('simulationController', simulationController);
         
-        // 8. 이벤트 레코더 생성 (선택적)
-        const eventRecorder = new EventRecorder(eventBus);
+        // 9. 이벤트 레코더 생성 (선택적)
+        const eventRecorder = new EventRecorder(window.eventBus);
         container.register('eventRecorder', eventRecorder);
         
-        // 9. 순환 의존성 검사
+        // 10. 순환 의존성 검사
         if (container.hasCircularDependency()) {
             throw new Error('Circular dependency detected!');
         }
         
-        // 10. 시뮬레이션 컨트롤러 초기화
+        // 11. 시뮬레이션 컨트롤러 초기화
         await simulationController.initialize();
         
-        // 11. 전역 함수 노출 (하위 호환성)
-        window.startSimulation = () => eventBus.emit(Events.START);
-        window.stopSimulation = () => eventBus.emit(Events.STOP);
+        // 12. 전역 함수 노출 (하위 호환성)
+        window.startSimulation = () => window.eventBus.emit(Events.START);
+        window.stopSimulation = () => window.eventBus.emit(Events.STOP);
         window.downloadFullLog = () => logger.download();
         
         // 디버그용 컨테이너 노출 (프로덕션에서는 제거)
