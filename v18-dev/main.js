@@ -43,15 +43,17 @@ class SimulationController {
     /**
      * 초기 상태 설정
      */
-    setupInitialState() {
+    async setupInitialState() {
         console.log('[SimulationController] Setting up initial state');
         
         // 캐릭터 상태 초기화
         const squad = this.configManager.config.squad.members;
         console.log('[SimulationController] Squad from config:', squad);
         
-        squad.forEach((characterId, index) => {
-            if (!characterId) return;
+        // forEach 대신 일반 for 루프 사용
+        for (let index = 0; index < squad.length; index++) {
+            const characterId = squad[index];
+            if (!characterId) continue;
             
             console.log(`[SimulationController] Initializing character ${characterId} at index ${index}`);
             
@@ -64,50 +66,53 @@ class SimulationController {
             const character = this.characterLoader.createCharacter(characterId, charConfig);
             
             if (character) {
-                const staticBuffs = this.configManager.calculateOverloadBuffs();
-                const cubeBuffs = this.getCubeBuffs();
-                const totalStaticBuffs = {
-                    ...staticBuffs,
-                    ...cubeBuffs
+                const staticBuffs = {
+                    ...this.configManager.calculateOverloadBuffs(),
+                    ...this.getCubeBuffs()
                 };
                 
                 console.log(`[SimulationController] Static buffs for ${characterId}:`, staticBuffs);
-                console.log(`[SimulationController] Total buffs for ${characterId}:`, totalStaticBuffs);
                 
-                // 버프 시스템을 통해 계산
-                const buffs = this.buffSystem.calculateTotalBuffs(characterId, totalStaticBuffs);
-                
-                // StateStore 업데이트
-                this.stateStore.update(state => {
-                    const collection = this.damageCalculator.getCollectionBonus(character.weaponType);
-                    const maxAmmo = Math.floor(character.baseStats.baseAmmo * 
-                        (1 + (buffs.maxAmmo || 0) + (collection.maxAmmo || 0)));
-                    
-                    state.combat.characters[characterId] = {
-                        baseAmmo: character.baseStats.baseAmmo,
-                        maxAmmo: maxAmmo,
-                        currentAmmo: maxAmmo,
-                        shotsFired: 0,
-                        attackCount: 0,
-                        totalDamage: 0,
-                        coreHitCount: 0,
-                        critCount: 0,
-                        totalPellets: 0,
-                        pelletsHit: 0,
-                        reloadCount: 0,
-                        skill1Count: 0,
-                        replaceAttack: null
-                    };
-                    
-                    console.log(`[SimulationController] Character state for ${characterId}:`, 
-                        state.combat.characters[characterId]);
-                    
-                    return state;
+                // mediator를 통해 버프 계산
+                const buffs = await this.mediator.request('GET_TOTAL_BUFFS', {
+                    characterId: characterId,
+                    staticBuffs: staticBuffs
                 });
+                
+                console.log(`[SimulationController] Total buffs for ${characterId}:`, buffs);
+                
+                // mediator를 통해 컬렉션 보너스 계산
+                const collectionBonus = await this.mediator.request('GET_COLLECTION_BONUS', {
+                    weaponType: character.weaponType
+                });
+                
+                const maxAmmo = Math.floor(character.baseStats.baseAmmo * 
+                    (1 + buffs.maxAmmo + collectionBonus.maxAmmo));
+                
+                const characterState = {
+                    id: characterId,
+                    characterSpec: characterId,
+                    currentAmmo: maxAmmo,
+                    maxAmmo: maxAmmo,
+                    attackCount: 0,
+                    shotsFired: 0,
+                    pelletsHit: 0,
+                    totalDamage: 0,
+                    coreHitCount: 0,
+                    critCount: 0,
+                    totalPellets: 0,
+                    reloadCount: 0,
+                    skill1Count: 0,
+                    replaceAttack: null
+                };
+                
+                console.log(`[SimulationController] Character state for ${characterId}:`, characterState);
+                
+                this.stateStore.set(`combat.characters.${characterId}`, characterState);
             } else {
                 console.error(`[SimulationController] Failed to create character ${characterId}`);
             }
-        });
+        }
         
         // 전체 combat 상태 확인
         console.log('[SimulationController] Combat state after initialization:', 

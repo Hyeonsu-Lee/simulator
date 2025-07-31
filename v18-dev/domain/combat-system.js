@@ -36,14 +36,6 @@ class CombatSystem {
     }
     
     registerMediatorHandlers() {
-        // 버프 계산 요청 핸들러
-        this.mediator.registerHandler('GET_TOTAL_BUFFS', async (data) => {
-            // 직접 버프 계산 후 반환
-            const staticBuffs = this.stateStore.get('buffs.static') || {};
-            const buffs = this.buffSystem.calculateTotalBuffs(data.characterId, staticBuffs);
-            return buffs;
-        });
-        
         // 컬렉션 보너스 핸들러
         this.mediator.registerHandler('GET_COLLECTION_BONUS', async (data) => {
             // DamageCalculator에서 직접 가져오기

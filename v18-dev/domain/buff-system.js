@@ -44,6 +44,10 @@ class BuffSystem {
             
             return stacks;
         });
+        this.mediator.registerHandler('GET_TOTAL_BUFFS', async (data) => {
+            const { characterId, staticBuffs = {} } = data;
+            return this.calculateTotalBuffs(characterId, staticBuffs);
+        });
     }
     
     /**
