@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>니케 시뮬레이터 디버그 테스트</title>
+</head>
+<body>
+    <h1>모듈 로드 테스트</h1>
+    <div id="test-results"></div>
+    
+    <!-- JavaScript 파일들 로드 (순서 중요!) -->
+    <script src="nikke-sim-constants.js"></script>
+    <script src="nikke-sim-utils.js"></script>
+    <script src="nikke-sim-classes.js"></script>
+    <script src="nikke-sim-logger.js"></script>
+    <script src="nikke-sim-state-manager.js"></script>
+    <script src="nikke-sim-burst-manager.js"></script>
+    <script src="nikke-sim-buff-calculator.js"></script>
+    <script src="nikke-sim-combat-simulator.js"></script>
+    <script src="nikke-sim-global-simulator.js"></script>
+    <script src="nikke-sim-ui-handlers.js"></script>
+    <script src="nikke-sim-main.js"></script>
+    
+    <script>
+        // 각 모듈이 제대로 로드되었는지 확인
+        const results = document.getElementById('test-results');
+        
+        const modules = [
+            { name: 'BUFF_TYPES', obj: typeof BUFF_TYPES },
+            { name: 'COMBAT_TIME', obj: typeof COMBAT_TIME },
+            { name: 'formatNumber', obj: typeof formatNumber },
+            { name: 'calculateGeneralDamage', obj: typeof calculateGeneralDamage },
+            { name: 'Nikke', obj: typeof Nikke },
+            { name: 'Dorothy', obj: typeof Dorothy },
+            { name: 'NIKKE_REGISTRY', obj: typeof NIKKE_REGISTRY },
+            { name: 'CombatLogger', obj: typeof CombatLogger },
+            { name: 'BuffStateManager', obj: typeof BuffStateManager },
+            { name: 'BurstManager', obj: typeof BurstManager },
+            { name: 'BuffCalculator', obj: typeof BuffCalculator },
+            { name: 'CombatSimulator', obj: typeof CombatSimulator },
+            { name: 'GlobalSimulator', obj: typeof GlobalSimulator },
+            { name: 'updateStats', obj: typeof updateStats },
+            { name: 'createOverloadUI', obj: typeof createOverloadUI },
+            { name: 'startSimulation', obj: typeof startSimulation },
+            { name: 'overloadConfig', obj: typeof overloadConfig }
+        ];
+        
+        modules.forEach(mod => {
+            const status = mod.obj !== 'undefined' ? '✅ 로드됨' : '❌ 없음';
+            const color = mod.obj !== 'undefined' ? 'green' : 'red';
+            results.innerHTML += `<p style="color: ${color}">${mod.name}: ${status} (${mod.obj})</p>`;
+        });
+        
+        // 니케 레지스트리 내용 확인
+        if (typeof NIKKE_REGISTRY !== 'undefined') {
+            results.innerHTML += '<h3>니케 레지스트리 내용:</h3>';
+            NIKKE_REGISTRY.forEach((value, key) => {
+                results.innerHTML += `<p>- ${key}</p>`;
+            });
+        }
+        
+        // 전역 함수 확인
+        results.innerHTML += '<h3>전역 함수 확인:</h3>';
+        results.innerHTML += `<p>window.startSimulation: ${typeof window.startSimulation}</p>`;
+        results.innerHTML += `<p>window.stopSimulation: ${typeof window.stopSimulation}</p>`;
+    </script>
+</body>
+</html>
