@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>전체 시뮬레이션 디버깅</title>
+    <style>
+        body {
+            background: #1a1a1a;
+            color: #0f0;
+            font-family: 'Consolas', monospace;
+            padding: 20px;
+        }
+        
+        .panel {
+            background: #000;
+            border: 1px solid #0f0;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        button {
+            background: #0f0;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        button:hover { background: #0ff; }
+        button:disabled { background: #666; cursor: not-allowed; }
+        
+        .log {
+            height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            background: #111;
+            padding: 10px;
+            border: 1px solid #333;
+        }
+        
+        .info { color: #0ff; }
+        .warn { color: #ff0; }
+        .error { color: #f00; }
+        .success { color: #0f0; }
+        .event { color: #f0f; }
+        .time { color: #fa0; }
+        
+        .stat { 
+            display: flex; 
+            justify-content: space-between; 
+            padding: 5px 0;
+            border-bottom: 1px solid #333;
+        }
+        
+        .stat-value { 
+            color: #0ff; 
+            font-weight: bold; 
+        }
+        
+        h3 { 
+            color: #0ff; 
+            margin: 10px 0;
+            border-bottom: 1px solid #0ff;
+            padding-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>니케 시뮬레이션 디버깅 도구</h1>
+    
+    <div class="panel">
+        <h3>컨트롤</h3>
+        <button id="initBtn">1. 시스템 초기화</button>
+        <button id="loadCharBtn">2. 캐릭터 로드</button>
+        <button id="setupSquadBtn">3. 스쿼드 설정 (도로시)</button>
+        <button id="testCombatBtn">4. 전투 시스템 테스트</button>
+        <button id="stepBtn">5. 수동 진행 (0.1초)</button>
+        <button id="runFullBtn">6. 전체 실행 (3초)</button>
+        <button id="resetBtn">리셋</button>
+        <button id="inspectBtn">상태 검사</button>
+    </div>
+    
+    <div class="grid">
+        <div class="panel">
+            <h3>시스템 상태</h3>
+            <div id="systemStats">
+                <div class="stat">
+                    <span>EventBus</span>
+                    <span class="stat-value" id="eventBusStatus">미초기화</span>
+                </div>
+                <div class="stat">
+                    <span>TimeManager</span>
+                    <span class="stat-value" id="timeManagerStatus">미초기화</span>
+                </div>
+                <div class="stat">
+                    <span>CharacterLoader</span>
+                    <span class="stat-value" id="charLoaderStatus">미초기화</span>
+                </div>
+                <div class="stat">
+                    <span>현재 시간</span>
+                    <span class="stat-value" id="currentTime">0.0s</span>
+                </div>
+                <div class="stat">
+                    <span>이벤트 큐</span>
+                    <span class="stat-value" id="eventQueue">0</span>
+                </div>
+                <div class="stat">
+                    <span>스쿼드</span>
+                    <span class="stat-value" id="squadStatus">비어있음</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <h3>전투 상태</h3>
+            <div id="combatStats">
+                <div class="stat">
+                    <span>도로시 탄약</span>
+                    <span class="stat-value" id="dorothyAmmo">-</span>
+                </div>
+                <div class="stat">
+                    <span>총 대미지</span>
+                    <span class="stat-value" id="totalDamage">0</span>
+                </div>
+                <div class="stat">
+                    <span>발사 횟수</span>
+                    <span class="stat-value" id="shotsFired">0</span>
+                </div>
+                <div class="stat">
+                    <span>다음 이벤트</span>
+                    <span class="stat-value" id="nextEvent">-</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="panel">
+        <h3>이벤트 로그</h3>
+        <div class="log" id="eventLog"></div>
+    </div>
+    
+    <div class="panel">
+        <h3>시스템 로그</h3>
+        <div class="log" id="systemLog"></div>
+    </div>
+
+    <!-- Core Layer -->
+    <script src="core/event-types.js"></script>
+    <script src="core/dependency-container.js"></script>
+    <script src="core/event-bus.js"></script>
+    <script src="core/state-store.js"></script>
+    <script src="core/time-manager.js"></script>
+    <script src="core/event-mediator.js"></script>
+    
+    <!-- Infrastructure Layer -->
+    <script src="infrastructure/logger.js"></script>
+    <script src="infrastructure/config-manager.js"></script>
+    <script src="infrastructure/character-loader.js"></script>
+    
+    <!-- Data -->
+    <script src="data/constants.js"></script>
+    <script src="data/characters/character-data.js"></script>
+    
+    <!-- Utils -->
+    <script src="utils/math-utils.js"></script>
+    
+    <!-- Domain Layer -->
+    <script src="domain/damage-calculator.js"></script>
+    <script src="domain/buff-system.js"></script>
+    <script src="domain/skill-system.js"></script>
+    <script src="domain/combat-system.js"></script>
+    
+    <script>
+        // 로그 함수
+        const eventLog = document.getElementById('eventLog');
+        const systemLog = document.getElementById('systemLog');
+        
+        function logEvent(message, type = 'info') {
+            const timestamp = new Date().toTimeString().split(' ')[0];
+            eventLog.innerHTML += `<span class="${type}">[${timestamp}] ${message}</span>\n`;
+            eventLog.scrollTop = eventLog.scrollHeight;
+        }
+        
+        function logSystem(message, type = 'info') {
+            const timestamp = new Date().toTimeString().split(' ')[0];
+            systemLog.innerHTML += `<span class="${type}">[${timestamp}] ${message}</span>\n`;
+            systemLog.scrollTop = systemLog.scrollHeight;
+        }
+        
+        // 전역 변수
+        let systems = {};
+        
+        // 상태 업데이트
+        function updateStats() {
+            // 시스템 상태
+            document.getElementById('eventBusStatus').textContent = 
+                systems.eventBus ? '준비' : '미초기화';
+            document.getElementById('timeManagerStatus').textContent = 
+                systems.timeManager ? (systems.timeManager.running ? '실행중' : '준비') : '미초기화';
+            document.getElementById('charLoaderStatus').textContent = 
+                systems.characterLoader?.loaded ? '로드됨' : '미초기화';
+            
+            if (systems.timeManager) {
+                document.getElementById('currentTime').textContent = 
+                    `${systems.timeManager.currentTime.toFixed(1)}s`;
+                document.getElementById('eventQueue').textContent = 
+                    systems.timeManager.events.length;
+                
+                // 다음 이벤트
+                if (systems.timeManager.events.length > 0) {
+                    const next = systems.timeManager.events[0];
+                    document.getElementById('nextEvent').textContent = 
+                        `${next.type} @ ${next.time.toFixed(3)}s`;
+                } else {
+                    document.getElementById('nextEvent').textContent = '없음';
+                }
+            }
+            
+            // 스쿼드 상태
+            if (systems.stateStore) {
+                const squad = systems.stateStore.get('squad.members');
+                const hasMembers = squad && squad.some(m => m !== null);
+                document.getElementById('squadStatus').textContent = 
+                    hasMembers ? squad.filter(m => m).join(', ') : '비어있음';
+                
+                // 전투 상태
+                const dorothyState = systems.stateStore.get('combat.characters.dorothy');
+                if (dorothyState) {
+                    document.getElementById('dorothyAmmo').textContent = 
+                        `${dorothyState.currentAmmo}/${dorothyState.maxAmmo}`;
+                    document.getElementById('totalDamage').textContent = 
+                        dorothyState.totalDamage.toLocaleString();
+                    document.getElementById('shotsFired').textContent = 
+                        dorothyState.shotsFired;
+                }
+            }
+        }
+        
+        // 버튼 핸들러
+        document.getElementById('initBtn').addEventListener('click', () => {
+            logSystem('=== 시스템 초기화 시작 ===', 'success');
+            
+            try {
+                // 1. 코어 시스템
+                systems.eventBus = new EventBus();
+                systems.stateStore = new StateStore(initialState);
+                systems.timeManager = new TimeManager();
+                systems.logger = new Logger();
+                
+                // 2. 인프라
+                systems.characterLoader = new CharacterLoader();
+                systems.configManager = new ConfigManager();
+                
+                // 3. 미디에이터
+                systems.mediator = new EventMediator(systems.eventBus);
+                
+                // 4. 도메인 시스템
+                systems.damageCalculator = new DamageCalculator({
+                    eventBus: systems.eventBus,
+                    mediator: systems.mediator
+                });
+                
+                systems.buffSystem = new BuffSystem({
+                    eventBus: systems.eventBus,
+                    mediator: systems.mediator,
+                    stateStore: systems.stateStore,
+                    timeManager: systems.timeManager,
+                    characterLoader: systems.characterLoader
+                });
+                
+                systems.skillSystem = new SkillSystem({
+                    eventBus: systems.eventBus,
+                    mediator: systems.mediator,
+                    stateStore: systems.stateStore,
+                    timeManager: systems.timeManager,
+                    logger: systems.logger,
+                    characterLoader: systems.characterLoader
+                });
+                
+                systems.combatSystem = new CombatSystem({
+                    eventBus: systems.eventBus,
+                    mediator: systems.mediator,
+                    stateStore: systems.stateStore,
+                    timeManager: systems.timeManager,
+                    logger: systems.logger,
+                    characterLoader: systems.characterLoader,
+                    configManager: systems.configManager
+                });
+                
+                // 컨테이너 설정
+                window.container = {
+                    get: (name) => systems[name] || null
+                };
+                
+                // 이벤트 모니터링
+                systems.eventBus.on(Events.ATTACK, (event) => {
+                    logEvent(`ATTACK: ${event.data.characterId} @ ${event.data.time?.toFixed(3)}s`, 'event');
+                });
+                
+                systems.eventBus.on(Events.DAMAGE_CALCULATED, (event) => {
+                    logEvent(`DAMAGE: ${event.data.damageResult.damage}`, 'success');
+                });
+                
+                systems.eventBus.on(Events.TICK, (event) => {
+                    // 너무 많아서 생략
+                });
+                
+                logSystem('모든 시스템 초기화 완료', 'success');
+                updateStats();
+                
+            } catch (error) {
+                logSystem(`초기화 실패: ${error.message}`, 'error');
+                console.error(error);
+            }
+        });
+        
+        document.getElementById('loadCharBtn').addEventListener('click', async () => {
+            logSystem('캐릭터 데이터 로드 중...', 'info');
+            try {
+                await systems.characterLoader.loadAll();
+                logSystem(`${systems.characterLoader.getAllIds().length}개 캐릭터 로드 완료`, 'success');
+                updateStats();
+            } catch (error) {
+                logSystem(`캐릭터 로드 실패: ${error.message}`, 'error');
+            }
+        });
+        
+        document.getElementById('setupSquadBtn').addEventListener('click', () => {
+            logSystem('스쿼드 설정 중...', 'info');
+            
+            // 도로시를 첫 번째 슬롯에
+            systems.configManager.setSquadMember(0, 'dorothy');
+            
+            // 캐릭터 상태 초기화
+            const character = systems.characterLoader.createCharacter('dorothy');
+            if (character) {
+                const maxAmmo = Math.floor(character.baseStats.baseAmmo * 1.7266); // 오버로드 적용
+                
+                systems.stateStore.set('combat.characters.dorothy', {
+                    id: 'dorothy',
+                    characterSpec: 'dorothy',
+                    currentAmmo: maxAmmo,
+                    maxAmmo: maxAmmo,
+                    attackCount: 0,
+                    shotsFired: 0,
+                    pelletsHit: 0,
+                    totalDamage: 0,
+                    coreHitCount: 0,
+                    critCount: 0,
+                    totalPellets: 0,
+                    reloadCount: 0,
+                    skill1Count: 0,
+                    replaceAttack: null
+                });
+                
+                logSystem('도로시 설정 완료', 'success');
+            }
+            
+            updateStats();
+        });
+        
+        document.getElementById('testCombatBtn').addEventListener('click', () => {
+            logSystem('전투 시스템 테스트', 'info');
+            
+            // 첫 공격 스케줄
+            systems.timeManager.schedule(0.666, Events.ATTACK, { characterId: 'dorothy' }, 5);
+            
+            // 버스트 스케줄
+            systems.timeManager.schedule(5, Events.BURST_READY, { cycle: 0 }, 1);
+            
+            logSystem('이벤트 스케줄 완료', 'success');
+            updateStats();
+        });
+        
+        document.getElementById('stepBtn').addEventListener('click', () => {
+            const targetTime = systems.timeManager.currentTime + 0.1;
+            logSystem(`수동 진행: ${targetTime.toFixed(1)}s까지`, 'info');
+            
+            const events = systems.timeManager.advance(targetTime);
+            
+            events.forEach(event => {
+                logEvent(`${event.type} 실행 @ ${event.time.toFixed(3)}s`, 'event');
+                
+                // 이벤트 실행
+                systems.eventBus.emit(event.type, event.data);
+            });
+            
+            updateStats();
+        });
+        
+        document.getElementById('runFullBtn').addEventListener('click', async () => {
+            logSystem('=== 전체 실행 시작 (3초) ===', 'success');
+            
+            try {
+                await systems.timeManager.run(3, 60, (currentTime) => {
+                    if (Math.floor(currentTime * 10) % 10 === 0) {
+                        updateStats();
+                    }
+                });
+                
+                logSystem('=== 실행 완료 ===', 'success');
+            } catch (error) {
+                logSystem(`실행 오류: ${error.message}`, 'error');
+                console.error(error);
+            }
+            
+            updateStats();
+        });
+        
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            logSystem('시스템 리셋', 'warn');
+            
+            if (systems.timeManager) systems.timeManager.reset();
+            if (systems.buffSystem) systems.buffSystem.reset();
+            if (systems.skillSystem) systems.skillSystem.reset();
+            
+            updateStats();
+        });
+        
+        document.getElementById('inspectBtn').addEventListener('click', () => {
+            logSystem('=== 상태 검사 ===', 'info');
+            
+            // TimeManager 이벤트 큐
+            if (systems.timeManager && systems.timeManager.events.length > 0) {
+                logSystem('이벤트 큐:', 'info');
+                systems.timeManager.events.slice(0, 5).forEach(event => {
+                    logSystem(`  ${event.type} @ ${event.time.toFixed(3)}s`, 'info');
+                });
+            }
+            
+            // 전투 상태
+            const dorothyState = systems.stateStore?.get('combat.characters.dorothy');
+            if (dorothyState) {
+                logSystem('도로시 상태:', 'info');
+                logSystem(`  탄약: ${dorothyState.currentAmmo}/${dorothyState.maxAmmo}`, 'info');
+                logSystem(`  총 대미지: ${dorothyState.totalDamage}`, 'info');
+                logSystem(`  발사 횟수: ${dorothyState.shotsFired}`, 'info');
+            }
+            
+            updateStats();
+        });
+        
+        // 주기적 업데이트
+        setInterval(updateStats, 100);
+        
+        // 사용법
+        logSystem('=== 사용법 ===', 'info');
+        logSystem('1. "시스템 초기화" 클릭', 'info');
+        logSystem('2. "캐릭터 로드" 클릭', 'info');
+        logSystem('3. "스쿼드 설정" 클릭', 'info');
+        logSystem('4. "전투 시스템 테스트" 클릭', 'info');
+        logSystem('5. "수동 진행" 또는 "전체 실행" 클릭', 'info');
+    </script>
+</body>
+</html>

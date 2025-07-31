@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>오류 직접 표시</title>
+    <style>
+        #errorLog {
+            background: #000;
+            color: #0f0;
+            padding: 20px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            height: 400px;
+            overflow-y: auto;
+        }
+        .error { color: #f00; }
+        .warning { color: #ff0; }
+        .info { color: #0ff; }
+    </style>
+</head>
+<body>
+    <h1>오류 메시지 직접 확인</h1>
+    <button id="testBtn">index.html과 동일한 환경 실행</button>
+    <button id="clearBtn">로그 지우기</button>
+    <div id="errorLog"></div>
+
+    <!-- 모든 스크립트 로드 (UI와 main.js 제외) -->
+    <script src="core/event-bus.js"></script>
+    <script src="core/state-store.js"></script>
+    <script src="core/time-manager.js"></script>
+    <script src="infrastructure/logger.js"></script>
+    <script src="infrastructure/config-manager.js"></script>
+    <script src="infrastructure/character-loader.js"></script>
+    <script src="data/constants.js"></script>
+    <script src="utils/math-utils.js"></script>
+    <script src="domain/damage-calculator.js"></script>
+    <script src="domain/buff-system.js"></script>
+    <script src="domain/skill-system.js"></script>
+    <script src="domain/combat-system.js"></script>
+    
+    <script>
+        const errorLog = document.getElementById('errorLog');
+        let errorCount = 0;
+        let warningCount = 0;
+        
+        // 모든 console 메서드 가로채기
+        const originalConsole = {
+            log: console.log,
+            error: console.error,
+            warn: console.warn,
+            info: console.info
+        };
+        
+        function logToScreen(message, type = 'info') {
+            const timestamp = new Date().toTimeString().split(' ')[0];
+            const className = type;
+            errorLog.innerHTML += `<span class="${className}">[${timestamp}] ${type.toUpperCase()}: ${message}</span>\n`;
+            errorLog.scrollTop = errorLog.scrollHeight;
+            
+            // 원본 콘솔에도 출력
+            if (originalConsole[type]) {
+                originalConsole[type](message);
+            }
+        }
+        
+        console.log = function(...args) {
+            logToScreen(args.join(' '), 'log');
+        };
+        
+        console.error = function(...args) {
+            errorCount++;
+            logToScreen(`ERROR #${errorCount}: ${args.join(' ')}`, 'error');
+        };
+        
+        console.warn = function(...args) {
+            warningCount++;
+            logToScreen(`WARNING #${warningCount}: ${args.join(' ')}`, 'warn');
+        };
+        
+        // 전역 에러 핸들러
+        window.addEventListener('error', (event) => {
+            errorCount++;
+            logToScreen(`
+GLOBAL ERROR #${errorCount}:
+Message: ${event.message}
+File: ${event.filename}
+Line: ${event.lineno}, Column: ${event.colno}
+Stack: ${event.error?.stack || 'No stack trace'}
+            `, 'error');
+        });
+        
+        // 테스트 버튼
+        document.getElementById('testBtn').addEventListener('click', async () => {
+            errorLog.innerHTML = '';
+            errorCount = 0;
+            warningCount = 0;
+            
+            logToScreen('=== 시뮬레이션 시작 ===', 'info');
+            
+            try {
+                // UI 없이 직접 초기화
+                logToScreen('캐릭터 데이터 로드 중...', 'info');
+                await characterLoader.loadAll();
+                logToScreen('캐릭터 로드 완료', 'info');
+                
+                // 도로시 설정
+                configManager.setSquadMember(0, 'dorothy');
+                logToScreen('도로시 설정 완료', 'info');
+                
+                // 초기 상태 설정
+                const charId = 'dorothy';
+                const character = characterLoader.createCharacter(charId);
+                const staticBuffs = configManager.calculateOverloadBuffs();
+                const buffs = buffSystem.calculateTotalBuffs(charId, staticBuffs);
+                const collectionBonus = damageCalculator.getCollectionBonus(character.weaponType);
+                const maxAmmo = Math.floor(character.baseStats.baseAmmo * 
+                    (1 + buffs.maxAmmo + collectionBonus.maxAmmo));
+                
+                stateStore.set(`combat.characters.${charId}`, {
+                    id: charId,
+                    characterSpec: charId,
+                    currentAmmo: maxAmmo,
+                    maxAmmo: maxAmmo,
+                    attackCount: 0,
+                    shotsFired: 0,
+                    pelletsHit: 0,
+                    totalDamage: 0,
+                    coreHitCount: 0,
+                    critCount: 0,
+                    totalPellets: 0,
+                    reloadCount: 0,
+                    skill1Count: 0,
+                    replaceAttack: null
+                });
+                
+                stateStore.set('buffs.static', staticBuffs);
+                
+                // 시스템 초기화
+                timeManager.reset();
+                buffSystem.reset();
+                skillSystem.reset();
+                skillSystem.initialize();
+                
+                logToScreen('전투 시작', 'info');
+                combatSystem.start();
+                
+                // 시뮬레이션 실행
+                await timeManager.run(
+                    10, // 10초만 실행
+                    60,
+                    (currentTime) => {
+                        if (Math.floor(currentTime) > Math.floor(currentTime - 0.1)) {
+                            logToScreen(`진행: ${Math.floor(currentTime)}초`, 'info');
+                        }
+                    }
+                );
+                
+                logToScreen('시뮬레이션 완료', 'info');
+                
+            } catch (error) {
+                logToScreen(`
+치명적 오류:
+${error.message}
+${error.stack}
+                `, 'error');
+            }
+            
+            setTimeout(() => {
+                logToScreen(`
+=== 최종 통계 ===
+총 오류: ${errorCount}개
+총 경고: ${warningCount}개
+                `, 'info');
+            }, 5000);
+        });
+        
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            errorLog.innerHTML = '';
+            errorCount = 0;
+            warningCount = 0;
+        });
+    </script>
+</body>
+</html>

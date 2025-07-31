@@ -1,0 +1,29 @@
+├── index.html
+├── styles.css
+├── core/
+│   ├── event-bus.js
+│   ├── state-store.js
+│   └── time-manager.js
+├── domain/
+│   ├── combat-system.js
+│   ├── buff-system.js
+│   ├── skill-system.js
+│   └── damage-calculator.js
+├── infrastructure/
+│   ├── character-loader.js
+│   ├── config-manager.js
+│   └── logger.js
+├── ui/
+│   ├── ui-controller.js
+│   └── simulation-view.js
+├── data/
+│   ├── constants.js
+│   └── characters/
+│       ├── character-list.json
+│       ├── dorothy.json
+│       ├── crown.json
+│       ├── helm.json
+│       └── siren.json
+├── utils/
+│   └── math-utils.js
+└── main.js
