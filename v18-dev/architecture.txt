@@ -1,0 +1,32 @@
+nikke-simulation/
+├── core/
+│   ├── dependency-container.js
+│   ├── event-bus.js
+│   ├── event-mediator.js
+│   ├── event-recorder.js
+│   ├── event-types.js
+│   ├── state-store.js
+│   └── time-manager.js
+├── data/
+│   ├── characters/
+│   │   └── character-data.js
+│   └── constants.js
+├── domain/
+│   ├── buff-system.js
+│   ├── combat-system.js
+│   ├── damage-calculator.js
+│   └── skill-system.js
+├── infrastructure/
+│   ├── character-loader.js
+│   ├── config-manager.js
+│   └── logger.js
+├── ui/
+│   ├── simulation-view.js
+│   └── ui-controller.js
+├── utils/
+│   └── math-utils.js
+├── architecture.txt
+├── debug-test.html
+├── index.html
+├── main.js
+└── styles.css

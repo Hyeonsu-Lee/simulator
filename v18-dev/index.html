@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>니케 전투 시뮬레이터</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 니케 전투 시뮬레이터</h1>
+        
+        <div id="overloadContainer"></div>
+        
+        <!-- 스쿼드 설정 (새로운 방식) -->
+        <div class="settings" id="squadSettings">
+            <!-- JavaScript에서 동적 생성 -->
+        </div>
+        
+        <!-- 시뮬레이션 설정 -->
+        <div class="settings">
+            <h2>시뮬레이션 설정</h2>
+            <div class="settings-grid">
+                <div class="setting-group">
+                    <label>거리 단계</label>
+                    <select id="distanceSelect">
+                        <option value="1">1단계 (근거리)</option>
+                        <option value="2" selected>2단계 (중거리)</option>
+                        <option value="3">3단계 (원거리)</option>
+                        <option value="4">4단계 (초원거리)</option>
+                    </select>
+                </div>
+                <div class="setting-group">
+                    <label>코어 크기</label>
+                    <select id="coreSize">
+                        <option value="100">100</option>
+                        <option value="75">75</option>
+                        <option value="50">50</option>
+                        <option value="40">40</option>
+                        <option value="30" selected>30</option>
+                        <option value="20">20</option>
+                        <option value="0">0 (노코어)</option>
+                    </select>
+                </div>
+                <div class="setting-group">
+                    <label>큐브</label>
+                    <select id="cubeSelect">
+                        <option value="">선택 안함</option>
+                        <option value="reload" selected>재장전 큐브</option>
+                    </select>
+                </div>
+                <div class="setting-group">
+                    <label>우월코드 여부</label>
+                    <select id="eliteCode">
+                        <option value="yes">우월코드 (우코)</option>
+                        <option value="no">일반 (비우코)</option>
+                    </select>
+                </div>
+                <div class="setting-group">
+                    <label>시뮬레이션 속도</label>
+                    <select id="simSpeed">
+                        <option value="1">실시간 (1x)</option>
+                        <option value="10">10배속</option>
+                        <option value="60" selected>60배속</option>
+                        <option value="180">180배속 (최고속)</option>
+                    </select>
+                </div>
+                <div class="setting-group">
+                    <label>반복 횟수</label>
+                    <input type="number" id="runCount" value="1" min="1" max="100">
+                </div>
+                <div class="setting-group" style="display: flex; align-items: flex-end; gap: 10px;">
+                    <button id="startBtn">시뮬레이션 시작</button>
+                    <button id="stopBtn" style="display: none;">중지</button>
+                    <button id="downloadLogBtn">전체 로그 다운로드</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="progress-bar hidden" id="progressBar">
+            <div class="progress-fill" id="progressFill">0%</div>
+        </div>
+        
+        <div class="simulation-area">
+            <div class="log-container" id="logContainer">
+                <h3 id="logTitle">전투 로그 (최근 50개 표시, 전체 0개 기록됨)</h3>
+                <div id="battleLog"></div>
+            </div>
+            
+            <div class="stats-container">
+                <h3>실시간 통계</h3>
+                <div class="stats-grid" id="realtimeStats">
+                    <div class="stat-item">
+                        <span class="stat-label">경과 시간</span>
+                        <span class="stat-value" id="elapsedTime">0.0s</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">총 대미지</span>
+                        <span class="stat-value" id="totalDamage">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">현재 DPS</span>
+                        <span class="stat-value" id="currentDPS">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">발사 수</span>
+                        <span class="stat-value" id="shotCount">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">코어히트율</span>
+                        <span class="stat-value" id="coreHitRate">0%</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">크리티컬률</span>
+                        <span class="stat-value" id="critRate">0%</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">재장전 횟수</span>
+                        <span class="stat-value" id="reloadCount">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">스킬1 발동</span>
+                        <span class="stat-value" id="skill1Count">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="results hidden" id="results">
+            <h2>시뮬레이션 결과</h2>
+            <div class="results-grid" id="finalResults"></div>
+            <div class="distribution-chart hidden" id="distributionChart">
+                <h3>DPS 분포도</h3>
+                <div id="dpsDistribution"></div>
+            </div>
+        </div>
+        
+        <!-- 기존 호환성을 위한 숨겨진 요소들 -->
+        <div style="display: none;">
+            <select id="characterSelect"></select>
+            <select id="squadNikke1"></select>
+            <select id="squadNikke2"></select>
+            <select id="squadNikke3"></select>
+            <select id="squadNikke4"></select>
+        </div>
+    </div>
+
+    <!-- Core Layer -->
+    <script src="core/event-types.js"></script>
+    <script src="core/dependency-container.js"></script>
+    <script src="core/event-bus.js"></script>
+    <script src="core/state-store.js"></script>
+    <script src="core/time-manager.js"></script>
+    <script src="core/event-mediator.js"></script>
+    <script src="core/event-recorder.js"></script>
+    
+    <!-- Infrastructure Layer -->
+    <script src="infrastructure/logger.js"></script>
+    <script src="infrastructure/config-manager.js"></script>
+    <script src="infrastructure/character-loader.js"></script>
+    
+    <!-- Data -->
+    <script src="data/constants.js"></script>
+    <script src="data/characters/character-data.js"></script>
+    
+    <!-- Utils -->
+    <script src="utils/math-utils.js"></script>
+    
+    <!-- Domain Layer -->
+    <script src="domain/damage-calculator.js"></script>
+    <script src="domain/buff-system.js"></script>
+    <script src="domain/skill-system.js"></script>
+    <script src="domain/combat-system.js"></script>
+    
+    <!-- UI Layer -->
+    <script src="ui/ui-controller.js"></script>
+    <script src="ui/simulation-view.js"></script>
+    
+    <!-- Main -->
+    <script src="main.js"></script>
+</body>
+</html>
