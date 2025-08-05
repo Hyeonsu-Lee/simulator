@@ -237,9 +237,5 @@ class SimulationView {
     }
 }
 
-// 전역 시뮬레이션 뷰
-const simulationView = new SimulationView();
-
 // 내보내기
 window.SimulationView = SimulationView;
-window.simulationView = simulationView;

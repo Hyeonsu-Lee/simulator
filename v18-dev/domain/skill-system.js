@@ -670,8 +670,3 @@ class SkillSystem {
 
 // 전역 노출
 window.SkillSystem = SkillSystem;
-
-// 내보내기
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = SkillSystem;
-}

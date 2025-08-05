@@ -282,8 +282,3 @@ const initialState = {
 // 전역 노출
 window.StateStore = StateStore;
 window.initialState = initialState;
-
-// 내보내기
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { StateStore, initialState };
-}

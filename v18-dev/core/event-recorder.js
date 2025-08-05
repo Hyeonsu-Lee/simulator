@@ -353,8 +353,3 @@ class EventRecorder {
 
 // 전역 노출
 window.EventRecorder = EventRecorder;
-
-// 내보내기
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = EventRecorder;
-}

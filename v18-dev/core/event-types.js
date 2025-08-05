@@ -97,8 +97,3 @@ const ErrorCode = Object.freeze({
 window.Events = Events;
 window.LogLevel = LogLevel;
 window.ErrorCode = ErrorCode;
-
-// 내보내기
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { Events, LogLevel, ErrorCode };
-}

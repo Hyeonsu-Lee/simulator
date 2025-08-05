@@ -432,8 +432,3 @@ class ConfigManager {
 
 // 전역 노출
 window.ConfigManager = ConfigManager;
-
-// 내보내기
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = ConfigManager;
-}

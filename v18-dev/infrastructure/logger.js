@@ -1,7 +1,8 @@
 // infrastructure/logger.js - 로깅 시스템 (개선된 버전)
 
 class Logger {
-    constructor() {
+    constructor(dependencies = {}) {
+        this.eventBus = dependencies.eventBus;
         this.logs = [];
         this.maxDisplayLogs = 50;
         this.logHandlers = new Set();
@@ -55,8 +56,8 @@ class Logger {
         });
         
         // UI 업데이트 이벤트
-        if (typeof eventBus !== 'undefined' && typeof Events !== 'undefined') {
-            eventBus.emit(Events.LOG_MESSAGE, entry);
+        if (this.eventBus && typeof Events !== 'undefined') {
+            this.eventBus.emit(Events.LOG_MESSAGE, entry);
         }
     }
     
@@ -94,8 +95,8 @@ class Logger {
      */
     clear() {
         this.logs = [];
-        if (typeof eventBus !== 'undefined' && typeof Events !== 'undefined') {
-            eventBus.emit(Events.LOG_MESSAGE, null);
+        if (this.eventBus && typeof Events !== 'undefined') {
+            this.eventBus.emit(Events.LOG_MESSAGE, null);
         }
     }
     
@@ -248,9 +249,3 @@ class Logger {
 
 // 전역 노출 (LogLevel 중복 선언 제거)
 window.Logger = Logger;
-window.logger = null; // main.js에서 인스턴스 생성
-
-// 내보내기
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = Logger;
-}

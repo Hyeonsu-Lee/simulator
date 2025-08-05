@@ -431,8 +431,3 @@ class Buff {
 // 전역 노출
 window.BuffSystem = BuffSystem;
 window.Buff = Buff;
-
-// 내보내기
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { BuffSystem, Buff };
-}

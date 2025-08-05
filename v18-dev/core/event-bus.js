@@ -217,8 +217,3 @@ class EventBus {
 
 // 전역 노출
 window.EventBus = EventBus;
-
-// 내보내기
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = EventBus;
-}

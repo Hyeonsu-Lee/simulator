@@ -168,10 +168,6 @@ class Character {
     }
 }
 
-// 전역 캐릭터 로더
-const characterLoader = new CharacterLoader();
-
 // 내보내기
 window.CharacterLoader = CharacterLoader;
 window.Character = Character;
-window.characterLoader = characterLoader;

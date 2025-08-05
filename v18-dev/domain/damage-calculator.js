@@ -223,8 +223,3 @@ class DamageCalculator {
 
 // 전역 노출  
 window.DamageCalculator = DamageCalculator;
-
-// 내보내기
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = DamageCalculator;
-}

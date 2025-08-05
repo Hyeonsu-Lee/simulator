@@ -311,11 +311,4 @@ class TimeManager {
 }
 
 // 전역 노출
-if (typeof window !== 'undefined') {
-    window.TimeManager = TimeManager;
-}
-
-// 내보내기
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = TimeManager;
-}
+window.TimeManager = TimeManager;

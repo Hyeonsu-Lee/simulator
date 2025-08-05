@@ -373,7 +373,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 5. 코어 시스템 초기화
         const stateStore = new StateStore(initialState);
         const timeManager = new TimeManager({ eventBus });
-        const logger = new Logger();
+        const logger = new Logger({ eventBus });
         
         
         // 6. 인프라 초기화

@@ -288,8 +288,3 @@ class EventMediator {
 
 // 전역 노출
 window.EventMediator = EventMediator;
-
-// 내보내기
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = EventMediator;
-}

@@ -166,14 +166,5 @@ class DependencyContainer {
     }
 }
 
-// 전역 컨테이너 생성
-const container = new DependencyContainer();
-
 // 전역 노출
 window.DependencyContainer = DependencyContainer;
-window.container = container;
-
-// 내보내기 (ES6 모듈 방식으로 변경 예정)
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { DependencyContainer, container };
-}

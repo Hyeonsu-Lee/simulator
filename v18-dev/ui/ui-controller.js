@@ -608,9 +608,5 @@ class UIController {
     }
 }
 
-// 전역 UI 컨트롤러 - 더 이상 사용하지 않음
-// const uiController = new UIController();
-
 // 내보내기
 window.UIController = UIController;
-// window.uiController = uiController; // 제거
