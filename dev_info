@@ -1,0 +1,40 @@
+ISSUE
+- TimeManager, Main.js 수정하는 가운데 초기화 문제
+v18 원본 main.js의 초기화 순서:
+
+window.eventBus = new EventBus() 생성
+StateStore는 initialState 매개변수로 생성 (eventBus 아님!)
+모든 도메인 시스템은 의존성 객체로 받음
+
+제가 잘못한 부분:
+
+StateStore 생성자를 잘못 이해함 - eventBus가 아니라 initialState를 받음
+하이브리드 TimeManager에서 window.eventBus 직접 참조
+
+문제의 원인:
+제가 준 하이브리드 TimeManager가 window.eventBus를 참조하는데, main.js에서 시스템들을 생성하는 시점에 window.eventBus가 아직 제대로 설정되지 않았을 가능성이 있습니다.main.js - v18 하이브리드 완전한 버전코드 ∙ 버전 4         // 1. 보안 코드
+        document.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            return false;
+        });
+        
+        // 2. 의존성 컨테이너 생성
+        const container = new DependencyContainer();
+        
+     main.js - v18 하이브리드 완전한 버전코드 ∙ 버전 5         
+        const uiController = new UIController({
+            eventBus: window.eventBus,
+            stateStore,
+            characterLoader,
+            configManager,
+            logger
+        });
+        
+        // 10. 시뮬레이션 컨트롤러 생성v18 원본의 정확한 초기화 순서로 수정했습니다:
+
+EventBus 생성 → window.eventBus에 할당
+StateStore는 initialState로 생성 (eventBus가 아님)
+모든 시스템 순서대로 생성
+skillSystem 생성 시 buffSystem이 아니라 logger를 전달
+
+이제 v18 원본과 동일한 초기화 순서를 유지하면서 하이브리드 방식이 적용됩니다.

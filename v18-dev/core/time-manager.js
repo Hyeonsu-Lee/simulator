@@ -1,4 +1,4 @@
-// core/time-manager.js - 시뮬레이션 시간 관리
+// core/time-manager.js - 시뮬레이션 시간 관리 (하이브리드 버전)
 
 class TimeManager {
     constructor() {
@@ -8,6 +8,7 @@ class TimeManager {
         this.running = false;
         this.eventId = 0;
         this.processingTime = 0; // 현재 처리 중인 이벤트의 시간
+        this.frameCallbacks = []; // 프레임 콜백
     }
     
     /**
@@ -22,6 +23,9 @@ class TimeManager {
         const referenceTime = this.processingTime || this.currentTime;
         
         if (time < referenceTime) {
+            // 디버그용 로그 (프로덕션에서는 제거)
+            // console.warn(`Event scheduled in the past: ${type} at ${time}, reference: ${referenceTime}`);
+            
             // 미세하게 미래로 조정
             time = referenceTime + 0.001;
         }
@@ -74,7 +78,7 @@ class TimeManager {
     }
     
     /**
-     * 특정 시간까지 진행
+     * 시간 진행
      * @param {number} untilTime 
      * @returns {Array} 처리된 이벤트들
      */
@@ -108,78 +112,91 @@ class TimeManager {
     }
     
     /**
-     * 시뮬레이션 실행 (v16 방식으로 변경)
+     * 프레임 콜백 등록
+     */
+    onFrame(callback) {
+        this.frameCallbacks.push(callback);
+        return () => {
+            const index = this.frameCallbacks.indexOf(callback);
+            if (index > -1) {
+                this.frameCallbacks.splice(index, 1);
+            }
+        };
+    }
+    
+    /**
+     * 시뮬레이션 실행 (하이브리드 - 외부에서 프레임 루프 관리)
      * @param {number} duration 
      * @param {number} speed 
      * @param {Function} onTick 
      */
-    async run(duration, speed = 1, onTick = null) {
+    run(duration, speed = 1, onTick = null) {
         console.log(`[TimeManager] Starting run for ${duration}s at ${speed}x speed`);
         
         this.running = true;
         this.speedMultiplier = speed;
         
-        const frameTime = 16; // 60fps
-        const maxSimTimePerFrame = 1.0; // 프레임당 최대 시뮬레이션 시간 (초)
+        // 실제 프레임 루프는 외부(main.js)에서 관리
+        // 여기서는 상태만 설정하고 프레임 처리 메서드 제공
         
-        let lastRealTime = performance.now();
-        let accumulatedTime = 0;
+        return {
+            duration,
+            speed,
+            processFrame: (deltaTime) => this.processFrame(deltaTime, duration, onTick)
+        };
+    }
+    
+    /**
+     * 프레임 처리 (동기)
+     */
+    processFrame(deltaTime, duration, onTick) {
+        if (!this.running) return false;
         
-        while (this.running && this.currentTime < duration) {
-            const now = performance.now();
-            const elapsed = now - lastRealTime;
+        const simulatedDelta = deltaTime * this.speedMultiplier;
+        const targetTime = Math.min(this.currentTime + simulatedDelta, duration);
+        
+        // 이벤트 처리
+        const events = this.advance(targetTime);
+        
+        // 이벤트를 시간 순서대로 처리
+        for (const event of events) {
+            // 각 이벤트 처리 전에 시간 동기화
+            this.processingTime = event.time;
             
-            if (elapsed >= frameTime) {
-                // 실제 경과 시간에 비례한 시뮬레이션 시간 계산
-                const deltaTime = (elapsed / 1000) * speed;
-                accumulatedTime += deltaTime;
-                
-                // 프레임당 처리할 시간 제한
-                const simTimeThisFrame = Math.min(accumulatedTime, maxSimTimePerFrame);
-                accumulatedTime -= simTimeThisFrame;
-                
-                const targetTime = Math.min(
-                    this.currentTime + simTimeThisFrame,
-                    duration
-                );
-                
-                // 이벤트 처리
-                const events = this.advance(targetTime);
-                
-                // 이벤트를 시간 순서대로 처리
-                for (const event of events) {
-                    // 각 이벤트 처리 전에 시간 동기화
-                    this.processingTime = event.time;
-                    
-                    // 전역 eventBus 사용
-                    if (window.eventBus) {
-                        window.eventBus.emit(event.type, event.data);
-                    }
-                }
-                this.processingTime = 0;
-                
-                // 틱 콜백
-                if (onTick) {
-                    onTick(this.currentTime);
-                }
-                
-                // TICK 이벤트
-                if (window.eventBus && typeof Events !== 'undefined') {
-                    window.eventBus.emit(Events.TICK, { time: this.currentTime });
-                }
-                
-                lastRealTime = now;
-                
-                // 다음 프레임까지 대기
-                await new Promise(resolve => setTimeout(resolve, 0));
-            } else {
-                // CPU 점유율을 낮추기 위한 짧은 대기
-                await new Promise(resolve => setTimeout(resolve, 1));
+            // 전역 eventBus 사용
+            if (window.eventBus) {
+                window.eventBus.emit(event.type, event.data);
             }
         }
+        this.processingTime = 0;
         
-        console.log(`[TimeManager] Run completed at ${this.currentTime}s`);
-        this.running = false;
+        // 틱 콜백
+        if (onTick) {
+            onTick(this.currentTime);
+        }
+        
+        // TICK 이벤트
+        if (window.eventBus && typeof Events !== 'undefined') {
+            window.eventBus.emit(Events.TICK, { time: this.currentTime });
+        }
+        
+        // 프레임 콜백 실행
+        this.frameCallbacks.forEach(callback => {
+            try {
+                callback(this.currentTime, deltaTime);
+            } catch (error) {
+                console.error('Error in frame callback:', error);
+            }
+        });
+        
+        // 완료 여부 반환
+        if (this.currentTime >= duration) {
+            console.log(`[TimeManager] Run completed at ${this.currentTime}s`);
+            this.running = false;
+            return false;
+        }
+        
+        return true;
     }
     
     /**
@@ -210,70 +227,18 @@ class TimeManager {
     }
     
     /**
-     * 반복 이벤트 스케줄
-     * @param {number} startTime 
-     * @param {number} interval 
-     * @param {string} type 
-     * @param {Object} data 
-     * @param {number} count - 반복 횟수 (Infinity 가능)
+     * 현재 큐 크기
      */
-    scheduleRepeating(startTime, interval, type, data = {}, count = Infinity) {
-        let scheduled = 0;
-        let time = startTime;
-        
-        while (scheduled < count && time <= 180) { // 최대 180초
-            this.schedule(time, type, data);
-            time += interval;
-            scheduled++;
-        }
-        
-        return scheduled;
+    getQueueSize() {
+        return this.events.length;
     }
     
     /**
-     * 조건부 이벤트 스케줄
-     * @param {Function} condition - () => boolean
-     * @param {string} type 
-     * @param {Object} data 
-     * @param {number} checkInterval 
+     * 시뮬레이션 진행률
      */
-    scheduleConditional(condition, type, data = {}, checkInterval = 0.1) {
-        const check = () => {
-            if (condition()) {
-                // 전역 eventBus 사용
-                if (window.eventBus) {
-                    window.eventBus.emit(type, { ...data, time: this.currentTime });
-                }
-            } else {
-                this.schedule(this.currentTime + checkInterval, 'internal.conditional_check', {
-                    originalType: type,
-                    originalData: data,
-                    condition,
-                    checkInterval
-                });
-            }
-        };
-        
-        check();
+    getProgress(duration) {
+        return Math.min(this.currentTime / duration, 1.0);
     }
-    
-    /**
-     * 현재 처리 중인 시간 가져오기
-     * 이벤트 핸들러 내에서 정확한 시간 참조용
-     */
-    getEventTime() {
-        return this.processingTime || this.currentTime;
-    }
-}
-
-// 조건부 이벤트 처리
-if (window.eventBus && typeof Events !== 'undefined') {
-    window.eventBus.on('internal.conditional_check', (event) => {
-        const { originalType, originalData, condition, checkInterval } = event.data;
-        if (window.timeManager) {
-            window.timeManager.scheduleConditional(condition, originalType, originalData, checkInterval);
-        }
-    });
 }
 
 // 전역 노출

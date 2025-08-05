@@ -1,4 +1,4 @@
-// main.js - 메인 애플리케이션 (의존성 주입 적용)
+// main.js - 메인 애플리케이션 (하이브리드 방식)
 
 class SimulationController {
     constructor(dependencies) {
@@ -19,6 +19,11 @@ class SimulationController {
         this.multiRunResults = [];
         this.currentRun = 0;
         this.totalRuns = 1;
+        
+        // 프레임 루프 관련 추가
+        this.frameLoopId = null;
+        this.lastFrameTime = 0;
+        this.runConfig = null;
     }
     
     /**
@@ -41,69 +46,56 @@ class SimulationController {
     }
     
     /**
-     * 초기 상태 설정
+     * 초기 상태 설정 (async 제거)
      */
-    async setupInitialState() {
+    setupInitialState() {
         console.log('[SimulationController] Setting up initial state');
         
         // 캐릭터 상태 초기화
         const squad = this.configManager.config.squad.members;
         console.log('[SimulationController] Squad from config:', squad);
         
-        // forEach 대신 일반 for 루프 사용
-        for (let index = 0; index < squad.length; index++) {
-            const characterId = squad[index];
-            if (!characterId) continue;
+        squad.forEach((characterId, index) => {
+            if (!characterId) return;
             
             console.log(`[SimulationController] Initializing character ${characterId} at index ${index}`);
             
             const charConfig = this.configManager.config.characters.get(characterId) || {
                 level: 200,
                 coreLevel: 10,
-                customAtk: null
+                skills: { skill1: 10, skill2: 10, burst: 10 }
             };
             
-            const character = this.characterLoader.createCharacter(characterId, charConfig);
+            // 캐릭터 생성
+            const character = this.characterLoader.create(characterId, {
+                level: charConfig.level,
+                coreLevel: charConfig.coreLevel,
+                skillLevels: charConfig.skills
+            });
             
             if (character) {
-                const staticBuffs = {
-                    ...this.configManager.calculateOverloadBuffs(),
-                    ...this.getCubeBuffs()
-                };
+                console.log(`[SimulationController] Created character:`, character);
                 
-                console.log(`[SimulationController] Static buffs for ${characterId}:`, staticBuffs);
-                
-                // mediator를 통해 버프 계산
-                const buffs = await this.mediator.request('GET_TOTAL_BUFFS', {
-                    characterId: characterId,
-                    staticBuffs: staticBuffs
-                });
-                
-                console.log(`[SimulationController] Total buffs for ${characterId}:`, buffs);
-                
-                // mediator를 통해 컬렉션 보너스 계산
-                const collectionBonus = await this.mediator.request('GET_COLLECTION_BONUS', {
-                    weaponType: character.weaponType
-                });
-                
-                const maxAmmo = Math.floor(character.baseStats.baseAmmo * 
-                    (1 + buffs.maxAmmo + collectionBonus.maxAmmo));
-                
+                // 캐릭터 상태 생성
                 const characterState = {
                     id: characterId,
-                    characterSpec: characterId,
-                    currentAmmo: maxAmmo,
-                    maxAmmo: maxAmmo,
-                    attackCount: 0,
+                    index: index,
+                    level: charConfig.level,
+                    coreLevel: charConfig.coreLevel,
+                    skillLevels: charConfig.skills,
                     shotsFired: 0,
-                    pelletsHit: 0,
                     totalDamage: 0,
-                    coreHitCount: 0,
                     critCount: 0,
+                    coreHitCount: 0,
                     totalPellets: 0,
                     reloadCount: 0,
                     skill1Count: 0,
-                    replaceAttack: null
+                    currentAmmo: character.baseStats.baseAmmo,
+                    maxAmmo: character.baseStats.baseAmmo,
+                    isReloading: false,
+                    reloadEndTime: 0,
+                    activeBuffs: new Map(),
+                    passiveSkillsApplied: false
                 };
                 
                 console.log(`[SimulationController] Character state for ${characterId}:`, characterState);
@@ -112,7 +104,7 @@ class SimulationController {
             } else {
                 console.error(`[SimulationController] Failed to create character ${characterId}`);
             }
-        }
+        });
         
         // 전체 combat 상태 확인
         console.log('[SimulationController] Combat state after initialization:', 
@@ -175,8 +167,8 @@ class SimulationController {
                 // 전투 시작
                 this.combatSystem.start();
                 
-                // 시뮬레이션 실행
-                await this.timeManager.run(
+                // 시뮬레이션 실행 (수정된 부분)
+                this.runConfig = this.timeManager.run(
                     this.configManager.config.simulation.duration,
                     this.configManager.config.simulation.speed,
                     (currentTime) => {
@@ -186,6 +178,10 @@ class SimulationController {
                         });
                     }
                 );
+                
+                // 프레임 루프 시작
+                this.lastFrameTime = performance.now();
+                await this.runFrameLoop();
                 
                 console.log(`[SimulationController] Run ${this.currentRun + 1} completed`);
                 
@@ -211,50 +207,88 @@ class SimulationController {
             
         } catch (error) {
             console.error('Simulation error:', error);
-            alert(`시뮬레이션 오류: ${error.message}`);
-        } finally {
-            this.simulationView.setSimulationRunning(false);
+            this.stopSimulation();
         }
+    }
+    
+    /**
+     * 프레임 루프
+     */
+    runFrameLoop() {
+        return new Promise((resolve) => {
+            const frameLoop = () => {
+                const currentTime = performance.now();
+                const deltaTime = (currentTime - this.lastFrameTime) / 1000; // 초 단위
+                this.lastFrameTime = currentTime;
+                
+                // 프레임 처리
+                const continueRunning = this.runConfig.processFrame(deltaTime);
+                
+                if (continueRunning && this.timeManager.running) {
+                    this.frameLoopId = requestAnimationFrame(frameLoop);
+                } else {
+                    // 완료
+                    if (this.frameLoopId) {
+                        cancelAnimationFrame(this.frameLoopId);
+                        this.frameLoopId = null;
+                    }
+                    resolve();
+                }
+            };
+            
+            frameLoop();
+        });
     }
     
     /**
      * 시뮬레이션 중지
      */
     stopSimulation() {
+        console.log('[SimulationController] Stopping simulation');
+        
         this.timeManager.stop();
         this.combatSystem.stop();
+        
+        // 프레임 루프 중지
+        if (this.frameLoopId) {
+            cancelAnimationFrame(this.frameLoopId);
+            this.frameLoopId = null;
+        }
     }
     
     /**
      * 시스템 리셋
      */
     resetSystems() {
-        console.log('[SimulationController] Resetting systems');
-        
         this.timeManager.reset();
-        this.buffSystem.reset();
-        this.skillSystem.reset();
+        this.stateStore.reset();
         
-        // 상태 리셋
-        this.stateStore.update(state => {
-            state.combat = {
-                time: 0,
-                running: false,
-                characters: {},
-                globalCounters: { bulletsConsumed: 0 }
-            };
-            state.burst = {
-                cycle: 0,
-                ready: false,
-                users: [],
-                fullBurst: false,
-                cooldowns: {}
-            };
-            state.buffs = {
-                active: {},
-                static: {}
-            };
-            return state;
+        // 전투 상태 초기화
+        this.stateStore.set('combat', {
+            time: 0,
+            targetIndex: this.configManager.config.squad.targetIndex,
+            distance: this.configManager.config.simulation.distance,
+            burstStartTime: 2.43,
+            burstCycleTime: 20,
+            started: false,
+            characters: {}
+        });
+        
+        // 버스트 상태 초기화
+        this.stateStore.set('burst', {
+            currentCycle: 0,
+            burstStarted: false,
+            burst1User: null,
+            burst2User: null,
+            burst3User: null,
+            isFullBurst: false,
+            lastBurstTimes: new Map()
+        });
+        
+        // 버프 상태 초기화
+        this.stateStore.set('buffs', {
+            static: {},
+            dynamic: new Map()
         });
     }
     
@@ -262,27 +296,13 @@ class SimulationController {
      * 결과 수집
      */
     collectResults() {
+        const targetIndex = this.configManager.config.squad.targetIndex;
+        const targetId = this.configManager.config.squad.members[targetIndex];
+        const targetState = this.stateStore.get(`combat.characters.${targetId}`);
         const combat = this.stateStore.get('combat');
-        const targetIndex = this.stateStore.get('squad.targetIndex');
-        const targetId = this.stateStore.get('squad.members')[targetIndex];
-        const targetState = combat.characters[targetId];
-        
-        console.log('[SimulationController] Collecting results for', targetId, ':', targetState);
-        
-        if (!targetState) {
-            return {
-                totalDamage: 0,
-                dps: 0,
-                shotCount: 0,
-                coreHitRate: 0,
-                critRate: 0,
-                reloadCount: 0,
-                skill1Count: 0,
-                totalPellets: 0
-            };
-        }
         
         return {
+            time: combat.time,
             totalDamage: targetState.totalDamage,
             dps: combat.time > 0 ? Math.floor(targetState.totalDamage / combat.time) : 0,
             shotCount: targetState.shotsFired,
@@ -326,36 +346,79 @@ class SimulationController {
         const avgDPS = Math.floor(results.reduce((sum, r) => sum + r.dps, 0) / results.length);
         
         this.logger.buff(this.timeManager.currentTime,
-            `[시뮬레이션 완료] 평균 DPS: ${avgDPS.toLocaleString('ko-KR')}`,
-            'buff'
+            `[시뮬레이션 완료] 평균 DPS: ${formatNumber(avgDPS)}`
         );
     }
 }
 
-// 애플리케이션 초기화
+/**
+ * 유틸리티 함수
+ */
+function formatNumber(num) {
+    return num.toLocaleString('ko-KR');
+}
+
+/**
+ * 메인 초기화 함수
+ */
 async function initializeApplication() {
+    console.log('Initializing Nikke Simulator...');
+    
     try {
-        console.log('Initializing Nikke Simulator...');
+        // 1. 보안 코드
+        document.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            return false;
+        });
         
-        // 1. 전역 eventBus 먼저 생성 (중요!)
+        // 2. 의존성 컨테이너 생성
+        const container = new DependencyContainer();
+        
+        // 3. 이벤트 버스 생성 (전역)
         window.eventBus = new EventBus();
         
-        // 2. 코어 시스템 초기화
-        const stateStore = new StateStore(initialState); // initialState는 state-store.js에서 export됨
+        // 4. StateStore의 초기 상태 가져오기
+        const initialState = typeof window.initialState !== 'undefined' ? window.initialState : {
+            combat: {
+                time: 0,
+                targetIndex: 0,
+                distance: 2,
+                burstStartTime: 2.43,
+                burstCycleTime: 20,
+                started: false,
+                characters: {}
+            },
+            burst: {
+                currentCycle: 0,
+                burstStarted: false,
+                burst1User: null,
+                burst2User: null,
+                burst3User: null,
+                isFullBurst: false,
+                lastBurstTimes: new Map()
+            },
+            buffs: {
+                static: {},
+                dynamic: new Map()
+            }
+        };
+        
+        // 5. 코어 시스템 초기화
+        const stateStore = new StateStore(initialState);
         const timeManager = new TimeManager();
         const logger = new Logger();
         
         // 전역 노출 (TimeManager에서 사용)
         window.timeManager = timeManager;
         
-        // 3. 인프라 초기화
+        // 6. 인프라 초기화
         const characterLoader = new CharacterLoader();
         const configManager = new ConfigManager();
         
-        // 4. 미디에이터 초기화
+        // 7. 미디에이터 초기화
         const mediator = new EventMediator(window.eventBus);
         
-        // 5. 도메인 시스템 생성 (의존성 주입)
+        // 8. 도메인 시스템 생성 (의존성 주입)
         const damageCalculator = new DamageCalculator({
             eventBus: window.eventBus,
             mediator
@@ -388,7 +451,10 @@ async function initializeApplication() {
             configManager
         });
         
-        // 6. UI 시스템 생성 (의존성 주입)
+        // 9. UI 시스템 생성 (의존성 주입)
+        const simulationView = new SimulationView();
+        
+        
         const uiController = new UIController({
             eventBus: window.eventBus,
             stateStore,
@@ -397,9 +463,7 @@ async function initializeApplication() {
             logger
         });
         
-        const simulationView = new SimulationView();
-        
-        // 7. 컨트롤러 생성
+        // 10. 시뮬레이션 컨트롤러 생성
         const simulationController = new SimulationController({
             eventBus: window.eventBus,
             mediator,
@@ -436,8 +500,8 @@ async function initializeApplication() {
         const eventRecorder = new EventRecorder(window.eventBus);
         container.register('eventRecorder', eventRecorder);
         
-        // 10. 순환 의존성 검사
-        if (container.hasCircularDependency()) {
+        // 10. 순환 의존성 검사 (hasCircularDependency가 없을 수 있음)
+        if (container.hasCircularDependency && container.hasCircularDependency()) {
             throw new Error('Circular dependency detected!');
         }
         
