@@ -169,12 +169,12 @@ class SkillSystem {
      * 상태 트리거 등록
      */
     registerStateTrigger(triggerId, characterId, skillSlot, skill, trigger) {
-        // 상태 트리거는 주기적으로 체크
+        // 상태 트리거는 주기적으로 체크 - 상수 사용
         if (trigger.continuous) {
             this.registerPeriodicTrigger(triggerId, characterId, skillSlot, skill, {
                 ...trigger,
                 type: 'state',
-                interval: 0.1
+                interval: window.STATE_CHECK_INTERVAL
             });
         }
     }
@@ -439,14 +439,14 @@ class SkillSystem {
     }
     
     /**
-     * 다중 타격
+     * 다중 타격 - 상수 사용
      */
     processMultiHitDamage(sourceId, effect, context) {
         const baseTime = context.time || this.timeManager.currentTime;
         
         for (let i = 0; i < effect.hits; i++) {
             this.timeManager.schedule(
-                baseTime + (i * 0.1),
+                baseTime + (i * window.MULTI_HIT_INTERVAL),
                 Events.DAMAGE,
                 {
                     sourceId: sourceId,

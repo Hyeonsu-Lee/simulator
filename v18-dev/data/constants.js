@@ -18,11 +18,20 @@ const OPTIMAL_DISTANCE = {
 // 버스트 관련 상수
 const BURST_GAUGE_CHARGE_TIME = 5; // 버스트 게이지 충전 시간
 const BURST_CYCLE_TIME = 20; // 버스트 사이클 시간
+const BURST_USE_DELAY = 0.143; // 버스트 사용 간 딜레이
+const FULL_BURST_DURATION = 10; // 풀버스트 지속시간
 const BURST_COOLDOWN_MAP = {
     20: 20,
     40: 40,
     60: 60
 };
+
+// UI 관련 상수
+const UI_UPDATE_INTERVAL = 0.1; // UI 업데이트 주기
+
+// 스킬 관련 상수
+const MULTI_HIT_INTERVAL = 0.1; // 다중 타격 간격
+const STATE_CHECK_INTERVAL = 0.1; // 상태 체크 주기
 
 // 큐브 데이터
 const CUBE_DATA = {
@@ -120,3 +129,45 @@ const SPREAD_COEFFICIENT = {
     MG: 0.7,
     SG: 1.0
 };
+
+// 전역 노출
+window.CRIT_RATE = CRIT_RATE;
+window.CRIT_DMG = CRIT_DMG;
+window.ENEMY_DEF = ENEMY_DEF;
+window.OPTIMAL_DISTANCE = OPTIMAL_DISTANCE;
+window.BURST_GAUGE_CHARGE_TIME = BURST_GAUGE_CHARGE_TIME;
+window.BURST_CYCLE_TIME = BURST_CYCLE_TIME;
+window.BURST_USE_DELAY = BURST_USE_DELAY;
+window.FULL_BURST_DURATION = FULL_BURST_DURATION;
+window.BURST_COOLDOWN_MAP = BURST_COOLDOWN_MAP;
+window.UI_UPDATE_INTERVAL = UI_UPDATE_INTERVAL;
+window.MULTI_HIT_INTERVAL = MULTI_HIT_INTERVAL;
+window.STATE_CHECK_INTERVAL = STATE_CHECK_INTERVAL;
+window.CUBE_DATA = CUBE_DATA;
+window.OVERLOAD_OPTIONS = OVERLOAD_OPTIONS;
+window.COLLECTION_BONUS = COLLECTION_BONUS;
+window.BASE_ACCURACY = BASE_ACCURACY;
+window.SPREAD_COEFFICIENT = SPREAD_COEFFICIENT;
+
+// 내보내기
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        CRIT_RATE,
+        CRIT_DMG,
+        ENEMY_DEF,
+        OPTIMAL_DISTANCE,
+        BURST_GAUGE_CHARGE_TIME,
+        BURST_CYCLE_TIME,
+        BURST_USE_DELAY,
+        FULL_BURST_DURATION,
+        BURST_COOLDOWN_MAP,
+        UI_UPDATE_INTERVAL,
+        MULTI_HIT_INTERVAL,
+        STATE_CHECK_INTERVAL,
+        CUBE_DATA,
+        OVERLOAD_OPTIONS,
+        COLLECTION_BONUS,
+        BASE_ACCURACY,
+        SPREAD_COEFFICIENT
+    };
+}
