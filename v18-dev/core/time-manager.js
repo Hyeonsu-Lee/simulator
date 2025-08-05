@@ -1,7 +1,8 @@
 // core/time-manager.js - 시뮬레이션 시간 관리 (하이브리드 버전)
 
 class TimeManager {
-    constructor() {
+    constructor(dependencies = {}) {
+        this.eventBus = dependencies.eventBus; // 의존성 주입
         this.events = [];
         this.currentTime = 0;
         this.speedMultiplier = 1;
@@ -230,9 +231,9 @@ class TimeManager {
             // 각 이벤트 처리 전에 시간 동기화
             this.processingTime = event.time;
             
-            // 전역 eventBus 사용
-            if (window.eventBus) {
-                window.eventBus.emit(event.type, event.data);
+            // 주입받은 eventBus 사용
+            if (this.eventBus) {
+                this.eventBus.emit(event.type, event.data);
             }
         }
         this.processingTime = 0;
@@ -243,8 +244,8 @@ class TimeManager {
         }
         
         // TICK 이벤트
-        if (window.eventBus && typeof Events !== 'undefined') {
-            window.eventBus.emit(Events.TICK, { time: this.currentTime });
+        if (this.eventBus) {
+            this.eventBus.emit(Events.TICK, { time: this.currentTime });
         }
         
         // 프레임 콜백 실행

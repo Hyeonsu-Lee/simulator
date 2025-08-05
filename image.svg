@@ -1,0 +1,237 @@
+<svg viewBox="0 0 1400 1800" xmlns="http://www.w3.org/2000/svg">
+  <!-- 스타일 정의 -->
+  <defs>
+    <style>
+      .layer-box { fill: #f0f4f8; stroke: #2d3748; stroke-width: 2; }
+      .core-box { fill: #bee3f8; stroke: #2b6cb0; stroke-width: 2; }
+      .domain-box { fill: #c6f6d5; stroke: #22543d; stroke-width: 2; }
+      .infra-box { fill: #fed7d7; stroke: #742a2a; stroke-width: 2; }
+      .ui-box { fill: #faf089; stroke: #744210; stroke-width: 2; }
+      .event-box { fill: #e9d8fd; stroke: #44337a; stroke-width: 2; }
+      .flow-arrow { fill: none; stroke: #4a5568; stroke-width: 2; marker-end: url(#arrowhead); }
+      .event-arrow { fill: none; stroke: #805ad5; stroke-width: 2; stroke-dasharray: 5,5; marker-end: url(#event-arrowhead); }
+      .text-title { font-family: Arial, sans-serif; font-size: 20px; font-weight: bold; fill: #1a202c; }
+      .text-subtitle { font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; fill: #2d3748; }
+      .text-normal { font-family: Arial, sans-serif; font-size: 14px; fill: #4a5568; }
+      .text-small { font-family: Arial, sans-serif; font-size: 12px; fill: #718096; }
+    </style>
+    
+    <!-- 화살표 마커 -->
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#4a5568" />
+    </marker>
+    <marker id="event-arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#805ad5" />
+    </marker>
+  </defs>
+
+  <!-- 제목 -->
+  <text x="700" y="40" text-anchor="middle" class="text-title">v18 니케 시뮬레이터 아키텍처</text>
+
+  <!-- Core Layer -->
+  <g id="core-layer">
+    <rect x="50" y="80" width="1300" height="280" rx="10" class="layer-box"/>
+    <text x="70" y="110" class="text-subtitle">Core Layer</text>
+    
+    <!-- EventBus -->
+    <rect x="100" y="140" width="180" height="80" rx="5" class="core-box"/>
+    <text x="190" y="170" text-anchor="middle" class="text-normal">EventBus</text>
+    <text x="190" y="190" text-anchor="middle" class="text-small">- 동기적 이벤트 처리</text>
+    <text x="190" y="205" text-anchor="middle" class="text-small">- 우선순위 관리</text>
+    
+    <!-- TimeManager -->
+    <rect x="320" y="140" width="180" height="80" rx="5" class="core-box"/>
+    <text x="410" y="170" text-anchor="middle" class="text-normal">TimeManager</text>
+    <text x="410" y="190" text-anchor="middle" class="text-small">- 이벤트 스케줄링</text>
+    <text x="410" y="205" text-anchor="middle" class="text-small">- 프레임 처리</text>
+    
+    <!-- StateStore -->
+    <rect x="540" y="140" width="180" height="80" rx="5" class="core-box"/>
+    <text x="630" y="170" text-anchor="middle" class="text-normal">StateStore</text>
+    <text x="630" y="190" text-anchor="middle" class="text-small">- 중앙 상태 관리</text>
+    <text x="630" y="205" text-anchor="middle" class="text-small">- 불변성 보장</text>
+    
+    <!-- EventMediator -->
+    <rect x="760" y="140" width="180" height="80" rx="5" class="core-box"/>
+    <text x="850" y="170" text-anchor="middle" class="text-normal">EventMediator</text>
+    <text x="850" y="190" text-anchor="middle" class="text-small">- 순환 참조 방지</text>
+    <text x="850" y="205" text-anchor="middle" class="text-small">- 요청/응답 패턴</text>
+    
+    <!-- DependencyContainer -->
+    <rect x="980" y="140" width="180" height="80" rx="5" class="core-box"/>
+    <text x="1070" y="170" text-anchor="middle" class="text-normal">DependencyContainer</text>
+    <text x="1070" y="190" text-anchor="middle" class="text-small">- 의존성 주입</text>
+    <text x="1070" y="205" text-anchor="middle" class="text-small">- 서비스 관리</text>
+    
+    <!-- Event Types -->
+    <rect x="100" y="250" width="260" height="80" rx="5" class="event-box"/>
+    <text x="230" y="280" text-anchor="middle" class="text-normal">Event Types</text>
+    <text x="230" y="300" text-anchor="middle" class="text-small">START, STOP, TICK, ATTACK</text>
+    <text x="230" y="315" text-anchor="middle" class="text-small">DAMAGE, BURST, BUFF, etc.</text>
+  </g>
+
+  <!-- Domain Layer -->
+  <g id="domain-layer">
+    <rect x="50" y="400" width="1300" height="280" rx="10" class="layer-box"/>
+    <text x="70" y="430" class="text-subtitle">Domain Layer</text>
+    
+    <!-- CombatSystem -->
+    <rect x="100" y="460" width="220" height="180" rx="5" class="domain-box"/>
+    <text x="210" y="490" text-anchor="middle" class="text-normal">CombatSystem</text>
+    <text x="210" y="510" text-anchor="middle" class="text-small">전투 흐름 제어</text>
+    <text x="110" y="535" class="text-small">• 공격 스케줄링</text>
+    <text x="110" y="555" class="text-small">• 재장전 처리</text>
+    <text x="110" y="575" class="text-small">• 버스트 사이클 관리</text>
+    <text x="110" y="595" class="text-small">• 통계 업데이트</text>
+    <text x="110" y="615" class="text-small">• 초기 이벤트 설정</text>
+    
+    <!-- BuffSystem -->
+    <rect x="360" y="460" width="220" height="180" rx="5" class="domain-box"/>
+    <text x="470" y="490" text-anchor="middle" class="text-normal">BuffSystem</text>
+    <text x="470" y="510" text-anchor="middle" class="text-small">버프 관리</text>
+    <text x="370" y="535" class="text-small">• 버프 적용/제거</text>
+    <text x="370" y="555" class="text-small">• 만료 시간 관리</text>
+    <text x="370" y="575" class="text-small">• 스택 처리</text>
+    <text x="370" y="595" class="text-small">• 버프 계산</text>
+    <text x="370" y="615" class="text-small">• 타겟 결정</text>
+    
+    <!-- SkillSystem -->
+    <rect x="620" y="460" width="220" height="180" rx="5" class="domain-box"/>
+    <text x="730" y="490" text-anchor="middle" class="text-normal">SkillSystem</text>
+    <text x="730" y="510" text-anchor="middle" class="text-small">스킬 처리</text>
+    <text x="630" y="535" class="text-small">• 트리거 관리</text>
+    <text x="630" y="555" class="text-small">• 효과 발동</text>
+    <text x="630" y="575" class="text-small">• 조건 체크</text>
+    <text x="630" y="595" class="text-small">• 누적값 추적</text>
+    <text x="630" y="615" class="text-small">• 주기적 체크</text>
+    
+    <!-- DamageCalculator -->
+    <rect x="880" y="460" width="220" height="180" rx="5" class="domain-box"/>
+    <text x="990" y="490" text-anchor="middle" class="text-normal">DamageCalculator</text>
+    <text x="990" y="510" text-anchor="middle" class="text-small">대미지 계산</text>
+    <text x="890" y="535" class="text-small">• 명중률 계산</text>
+    <text x="890" y="555" class="text-small">• 코어 히트 판정</text>
+    <text x="890" y="575" class="text-small">• 크리티컬 판정</text>
+    <text x="890" y="595" class="text-small">• 버프 적용</text>
+    <text x="890" y="615" class="text-small">• 최종 대미지</text>
+  </g>
+
+  <!-- Infrastructure Layer -->
+  <g id="infra-layer">
+    <rect x="50" y="720" width="1300" height="200" rx="10" class="layer-box"/>
+    <text x="70" y="750" class="text-subtitle">Infrastructure Layer</text>
+    
+    <!-- Logger -->
+    <rect x="100" y="780" width="200" height="100" rx="5" class="infra-box"/>
+    <text x="200" y="810" text-anchor="middle" class="text-normal">Logger</text>
+    <text x="200" y="835" text-anchor="middle" class="text-small">• 전투 로그 기록</text>
+    <text x="200" y="855" text-anchor="middle" class="text-small">• 로그 타입 분류</text>
+    
+    <!-- CharacterLoader -->
+    <rect x="340" y="780" width="200" height="100" rx="5" class="infra-box"/>
+    <text x="440" y="810" text-anchor="middle" class="text-normal">CharacterLoader</text>
+    <text x="440" y="835" text-anchor="middle" class="text-small">• 캐릭터 데이터 로드</text>
+    <text x="440" y="855" text-anchor="middle" class="text-small">• 인스턴스 생성</text>
+    
+    <!-- ConfigManager -->
+    <rect x="580" y="780" width="200" height="100" rx="5" class="infra-box"/>
+    <text x="680" y="810" text-anchor="middle" class="text-normal">ConfigManager</text>
+    <text x="680" y="835" text-anchor="middle" class="text-small">• 설정 관리</text>
+    <text x="680" y="855" text-anchor="middle" class="text-small">• 검증 처리</text>
+  </g>
+
+  <!-- UI Layer -->
+  <g id="ui-layer">
+    <rect x="50" y="960" width="1300" height="200" rx="10" class="layer-box"/>
+    <text x="70" y="990" class="text-subtitle">UI Layer</text>
+    
+    <!-- UIController -->
+    <rect x="100" y="1020" width="200" height="100" rx="5" class="ui-box"/>
+    <text x="200" y="1050" text-anchor="middle" class="text-normal">UIController</text>
+    <text x="200" y="1075" text-anchor="middle" class="text-small">• UI 이벤트 처리</text>
+    <text x="200" y="1095" text-anchor="middle" class="text-small">• 상태 반영</text>
+    
+    <!-- SimulationView -->
+    <rect x="340" y="1020" width="200" height="100" rx="5" class="ui-box"/>
+    <text x="440" y="1050" text-anchor="middle" class="text-normal">SimulationView</text>
+    <text x="440" y="1075" text-anchor="middle" class="text-small">• 결과 표시</text>
+    <text x="440" y="1095" text-anchor="middle" class="text-small">• 통계 렌더링</text>
+  </g>
+
+  <!-- Main Controller -->
+  <g id="main-controller">
+    <rect x="400" y="1200" width="600" height="100" rx="10" class="layer-box"/>
+    <text x="700" y="1235" text-anchor="middle" class="text-subtitle">SimulationController</text>
+    <text x="700" y="1260" text-anchor="middle" class="text-small">전체 시뮬레이션 제어 및 프레임 루프 관리</text>
+    <text x="700" y="1280" text-anchor="middle" class="text-small">requestAnimationFrame → TimeManager.processFrame</text>
+  </g>
+
+  <!-- Event Flow Diagram -->
+  <g id="event-flow">
+    <text x="700" y="1350" text-anchor="middle" class="text-subtitle">이벤트 플로우</text>
+    
+    <!-- Flow boxes -->
+    <rect x="100" y="1380" width="140" height="60" rx="5" class="event-box"/>
+    <text x="170" y="1415" text-anchor="middle" class="text-small">시작 버튼</text>
+    
+    <rect x="300" y="1380" width="140" height="60" rx="5" class="event-box"/>
+    <text x="370" y="1415" text-anchor="middle" class="text-small">START 이벤트</text>
+    
+    <rect x="500" y="1380" width="140" height="60" rx="5" class="event-box"/>
+    <text x="570" y="1415" text-anchor="middle" class="text-small">초기 스케줄</text>
+    
+    <rect x="700" y="1380" width="140" height="60" rx="5" class="event-box"/>
+    <text x="770" y="1415" text-anchor="middle" class="text-small">프레임 루프</text>
+    
+    <rect x="900" y="1380" width="140" height="60" rx="5" class="event-box"/>
+    <text x="970" y="1415" text-anchor="middle" class="text-small">이벤트 처리</text>
+    
+    <rect x="1100" y="1380" width="140" height="60" rx="5" class="event-box"/>
+    <text x="1170" y="1415" text-anchor="middle" class="text-small">상태 업데이트</text>
+    
+    <!-- Flow arrows -->
+    <path d="M 240 1410 L 290 1410" class="flow-arrow"/>
+    <path d="M 440 1410 L 490 1410" class="flow-arrow"/>
+    <path d="M 640 1410 L 690 1410" class="flow-arrow"/>
+    <path d="M 840 1410 L 890 1410" class="flow-arrow"/>
+    <path d="M 1040 1410 L 1090 1410" class="flow-arrow"/>
+    
+    <!-- Loop back arrow -->
+    <path d="M 1170 1440 L 1170 1480 L 770 1480 L 770 1440" class="flow-arrow"/>
+  </g>
+
+  <!-- Key Features -->
+  <g id="key-features">
+    <rect x="50" y="1520" width="1300" height="200" rx="10" class="layer-box"/>
+    <text x="70" y="1550" class="text-subtitle">주요 특징</text>
+    
+    <text x="100" y="1580" class="text-normal">• 이벤트 기반 아키텍처: 모든 시스템 간 통신은 EventBus를 통해 수행</text>
+    <text x="100" y="1605" class="text-normal">• 동기적 처리: 이벤트는 emit 시점에 즉시 처리됨 (Promise/async 없음)</text>
+    <text x="100" y="1630" class="text-normal">• 프레임 기반 시뮬레이션: requestAnimationFrame으로 실시간 제어</text>
+    <text x="100" y="1655" class="text-normal">• 모듈화: 각 시스템은 독립적으로 동작하며 EventMediator로 순환 참조 방지</text>
+    <text x="100" y="1680" class="text-normal">• 확장성: character-data.js에 캐릭터 추가만으로 새 캐릭터 지원</text>
+  </g>
+
+  <!-- Connection arrows between layers -->
+  <path d="M 700 360 L 700 390" class="flow-arrow" stroke-width="3"/>
+  <path d="M 700 680 L 700 710" class="flow-arrow" stroke-width="3"/>
+  <path d="M 700 920 L 700 950" class="flow-arrow" stroke-width="3"/>
+  <path d="M 700 1160 L 700 1190" class="flow-arrow" stroke-width="3"/>
+  
+  <!-- Event flow indicators -->
+  <circle cx="190" cy="300" r="30" fill="#805ad5" opacity="0.3"/>
+  <text x="190" y="305" text-anchor="middle" class="text-small" fill="white">Events</text>
+  
+  <!-- Legend -->
+  <g id="legend" transform="translate(1150, 100)">
+    <text x="0" y="0" class="text-small">범례:</text>
+    <rect x="0" y="10" width="40" height="20" class="core-box"/>
+    <text x="45" y="25" class="text-small">Core</text>
+    <rect x="0" y="40" width="40" height="20" class="domain-box"/>
+    <text x="45" y="55" class="text-small">Domain</text>
+    <rect x="0" y="70" width="40" height="20" class="infra-box"/>
+    <text x="45" y="85" class="text-small">Infra</text>
+    <rect x="0" y="100" width="40" height="20" class="ui-box"/>
+    <text x="45" y="115" class="text-small">UI</text>
+  </g>
+</svg>

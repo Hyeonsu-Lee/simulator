@@ -331,7 +331,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const container = new DependencyContainer();
         
         // 3. 이벤트 버스 생성
-        window.eventBus = new EventBus();
+        const eventBus = new EventBus();
         
         // Events가 정의되어 있는지 확인
         console.log('[Main] Events.START:', Events.START);
@@ -372,11 +372,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // 5. 코어 시스템 초기화
         const stateStore = new StateStore(initialState);
-        const timeManager = new TimeManager();
+        const timeManager = new TimeManager({ eventBus });
         const logger = new Logger();
         
-        // 전역 노출 (TimeManager에서 사용)
-        window.timeManager = timeManager;
         
         // 6. 인프라 초기화
         const characterLoader = new CharacterLoader();
@@ -386,16 +384,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         await characterLoader.loadAll();
         
         // 7. 미디에이터 초기화
-        const mediator = new EventMediator(window.eventBus);
+        const mediator = new EventMediator(eventBus);
         
         // 8. 도메인 시스템 생성 (의존성 주입)
         const damageCalculator = new DamageCalculator({
-            eventBus: window.eventBus,
+            eventBus: eventBus,
             mediator
         });
         
         const buffSystem = new BuffSystem({
-            eventBus: window.eventBus,
+            eventBus: eventBus,
             mediator,
             stateStore,
             timeManager,
@@ -403,7 +401,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         
         const skillSystem = new SkillSystem({
-            eventBus: window.eventBus,
+            eventBus: eventBus,
             mediator,
             stateStore,
             timeManager,
@@ -412,7 +410,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         
         const combatSystem = new CombatSystem({
-            eventBus: window.eventBus,
+            eventBus: eventBus,
             mediator,
             stateStore,
             timeManager,
@@ -425,7 +423,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const simulationView = new SimulationView();
         
         const uiController = new UIController({
-            eventBus: window.eventBus,
+            eventBus: eventBus,
             stateStore,
             characterLoader,
             configManager,
@@ -434,7 +432,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // 10. 시뮬레이션 컨트롤러 생성
         const simulationController = new SimulationController({
-            eventBus: window.eventBus,
+            eventBus: eventBus,
             mediator,
             stateStore,
             timeManager,
@@ -450,7 +448,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         
         // 11. 의존성 컨테이너에 등록
-        container.register('eventBus', window.eventBus);
+        container.register('eventBus', eventBus);
         container.register('mediator', mediator);
         container.register('stateStore', stateStore);
         container.register('timeManager', timeManager);
@@ -470,6 +468,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // 13. UI 초기화
         await uiController.initialize();
+
+        // 14. 전역 함수 노출 (컨테이너를 통한 간접 접근)
+        window.startSimulation = () => {
+            const eb = container.get('eventBus');
+            if (eb) eb.emit(Events.START);
+        };
+
+        window.stopSimulation = () => {
+            const eb = container.get('eventBus');
+            if (eb) eb.emit(Events.STOP);
+        };
+
+        window.downloadFullLog = () => {
+            const log = container.get('logger');
+            if (log) log.download();
+        };
         
         console.log('[Main] Initialization complete');
         
