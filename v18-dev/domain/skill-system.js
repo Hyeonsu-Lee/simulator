@@ -3,11 +3,11 @@
 class SkillSystem {
     constructor(dependencies) {
         this.eventBus = dependencies.eventBus;
-        this.mediator = dependencies.mediator;
         this.stateStore = dependencies.stateStore;
         this.timeManager = dependencies.timeManager;
         this.logger = dependencies.logger;
         this.characterLoader = dependencies.characterLoader;
+        this.buffSystem = dependencies.buffSystem;  // 추가
         
         this.registeredSkills = new Map();
         this.triggerHandlers = new Map();
@@ -304,14 +304,14 @@ class SkillSystem {
     /**
      * 효과 처리
      */
-    async processEffect(sourceId, effect, context) {
+    processEffect(sourceId, effect, context) {
         switch (effect.type) {
             case 'buff':
-                await this.processBuff(sourceId, effect, context);
+                this.processBuff(sourceId, effect, context);
                 break;
                 
             case 'stack':
-                await this.processStack(sourceId, effect, context);
+                this.processStack(sourceId, effect, context);
                 break;
                 
             case 'replace_attack':
@@ -319,7 +319,7 @@ class SkillSystem {
                 break;
                 
             case 'instant_damage':
-                await this.processInstantDamage(sourceId, effect, context);
+                this.processInstantDamage(sourceId, effect, context);
                 break;
                 
             case 'multi_hit_damage':
@@ -343,7 +343,7 @@ class SkillSystem {
                 break;
                 
             case 'transform_buff':
-                await this.processBuffTransform(sourceId, effect, context);
+                this.processBuffTransform(sourceId, effect, context);
                 break;
         }
     }
@@ -351,7 +351,7 @@ class SkillSystem {
     /**
      * 버프 처리
      */
-    async processBuff(sourceId, effect, context) {
+    processBuff(sourceId, effect, context) {
         const targets = this.resolveTargets(effect.target, sourceId);
         
         targets.forEach(target => {
@@ -369,7 +369,7 @@ class SkillSystem {
     /**
      * 스택 처리
      */
-    async processStack(sourceId, effect, context) {
+    processStack(sourceId, effect, context) {
         // 스택 버프는 BuffSystem에서 처리
         this.eventBus.emit(Events.BUFF_APPLY, {
             buffId: effect.buffId,
@@ -384,10 +384,10 @@ class SkillSystem {
         
         // 최대 스택 도달 시 효과
         if (effect.onMaxStacks) {
-            const currentStacks = await this.getBuffStacks(sourceId, effect.buffId);
+            const currentStacks = this.getBuffStacks(sourceId, effect.buffId);
             if (currentStacks >= (effect.maxStacks || 20)) {
                 for (const maxEffect of effect.onMaxStacks) {
-                    await this.processEffect(sourceId, maxEffect, context);
+                    this.processEffect(sourceId, maxEffect, context);
                 }
             }
         }
@@ -414,28 +414,25 @@ class SkillSystem {
     /**
      * 즉시 대미지
      */
-    async processInstantDamage(sourceId, effect, context) {
+    processInstantDamage(sourceId, effect, context) {
         const charSpec = this.characterLoader.getSpec(sourceId);
         if (!charSpec) return;
         
-        const buffs = await this.mediator.request('GET_TOTAL_BUFFS', {
-            characterId: sourceId,
-            requestId: `instant-damage-${sourceId}-${context.time}`
-        });
-        
-        const damage = await this.mediator.request('CALCULATE_INSTANT_DAMAGE', {
-            source: { id: sourceId, baseStats: charSpec.baseStats },
-            damage: effect.damage,
-            buffs: buffs
-        });
+        const buffs = this.buffSystem.calculateTotalBuffs(sourceId);
+        const damage = this.calculateInstantDamage(charSpec, effect, buffs);
         
         this.eventBus.emit(Events.DAMAGE, {
             sourceId: sourceId,
             damage: damage,
-            type: 'instant',
-            skill: effect.skill,
-            time: context.time || this.timeManager.currentTime
+            type: 'instant'
         });
+    }
+
+    // 새로운 메소드 추가
+    calculateInstantDamage(charSpec, effect, buffs) {
+        const finalAtk = charSpec.baseStats.atk * (1 + (buffs.atkPercent || 0));
+        const baseDamage = finalAtk * effect.damage.value;
+        return Math.floor(baseDamage * (1 + (buffs.damageIncrease || 0)));
     }
     
     /**
@@ -518,7 +515,7 @@ class SkillSystem {
     /**
      * 버프 변환
      */
-    async processBuffTransform(sourceId, effect, context) {
+    processBuffTransform(sourceId, effect, context) {
         // BuffSystem에 변환 요청
         this.eventBus.emit(Events.BUFF_TRANSFORM, {
             targetId: sourceId,
@@ -629,12 +626,8 @@ class SkillSystem {
     /**
      * 버프 스택 확인
      */
-    async getBuffStacks(characterId, buffId) {
-        // 미디에이터를 통해 버프 시스템에 요청
-        return await this.mediator.request('GET_BUFF_STACKS', {
-            characterId,
-            buffId
-        });
+    getBuffStacks(characterId, buffId) {
+        return this.buffSystem.getBuffStacks(characterId, buffId);
     }
     
     /**

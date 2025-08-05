@@ -3,7 +3,6 @@
 class BuffSystem {
     constructor(dependencies) {
         this.eventBus = dependencies.eventBus;
-        this.mediator = dependencies.mediator;
         this.stateStore = dependencies.stateStore;
         this.timeManager = dependencies.timeManager;
         this.characterLoader = dependencies.characterLoader;
@@ -13,7 +12,6 @@ class BuffSystem {
         
         // 이벤트 구독
         this.subscribeToEvents();
-        this.registerMediatorHandlers();
     }
     
     subscribeToEvents() {
@@ -28,26 +26,17 @@ class BuffSystem {
         this.eventBus.on(Events.BUFF_DECREMENT_SHOT, (event) => this.decrementShotBuffs(event.data.characterId));
     }
     
-    registerMediatorHandlers() {
-        // 버프 스택 조회 핸들러
-        this.mediator.registerHandler('GET_BUFF_STACKS', async (data) => {
-            const { characterId, buffId } = data;
-            const charBuffs = this.activeBuffs.get(characterId);
-            if (!charBuffs) return 0;
-            
-            let stacks = 0;
-            charBuffs.forEach((buff, key) => {
-                if (buff.buffId === buffId) {
-                    stacks = buff.stacks || 1;
-                }
-            });
-            
-            return stacks;
+    getBuffStacks(characterId, buffId) {
+        const charBuffs = this.activeBuffs.get(characterId);
+        if (!charBuffs) return 0;
+        
+        let stacks = 0;
+        charBuffs.forEach((buff, key) => {
+            if (buff.buffId === buffId) {
+                stacks = buff.stacks || 1;
+            }
         });
-        this.mediator.registerHandler('GET_TOTAL_BUFFS', async (data) => {
-            const { characterId, staticBuffs = {} } = data;
-            return this.calculateTotalBuffs(characterId, staticBuffs);
-        });
+        return stacks;
     }
     
     /**
@@ -133,7 +122,7 @@ class BuffSystem {
     /**
      * 버프 계산 요청 처리
      */
-    async handleBuffCalculate(event) {
+    handleBuffCalculate(event) {
         const { characterId, requestId } = event.data;
         
         // 정적 버프 가져오기

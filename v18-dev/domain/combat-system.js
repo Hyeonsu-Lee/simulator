@@ -3,16 +3,16 @@
 class CombatSystem {
     constructor(dependencies) {
         this.eventBus = dependencies.eventBus;
-        this.mediator = dependencies.mediator;
         this.stateStore = dependencies.stateStore;
         this.timeManager = dependencies.timeManager;
         this.logger = dependencies.logger;
         this.characterLoader = dependencies.characterLoader;
         this.configManager = dependencies.configManager;
+        this.buffSystem = dependencies.buffSystem;         // 추가
+        this.damageCalculator = dependencies.damageCalculator; // 추가
         
         this.running = false;
         this.subscribeToEvents();
-        this.registerMediatorHandlers();
     }
     
     subscribeToEvents() {
@@ -32,18 +32,6 @@ class CombatSystem {
         this.eventBus.on(Events.BURST_READY, (event) => this.handleBurstReady(event));
         this.eventBus.on(Events.BURST_USE, (event) => this.handleBurstUse(event));
         this.eventBus.on(Events.FULL_BURST_END, (event) => this.handleFullBurstEnd(event));
-    }
-    
-    registerMediatorHandlers() {
-        // 컬렉션 보너스 핸들러
-        this.mediator.registerHandler('GET_COLLECTION_BONUS', async (data) => {
-            // DamageCalculator에서 직접 가져오기
-            const damageCalculator = window.container?.get('damageCalculator');
-            if (damageCalculator) {
-                return damageCalculator.getCollectionBonus(data.weaponType);
-            }
-            return { coreBonus: 0, chargeRatio: 0, damageMultiplier: 1, maxAmmo: 0 };
-        });
     }
     
     /**
@@ -158,7 +146,7 @@ class CombatSystem {
     /**
      * 공격 처리
      */
-    async handleAttack(event) {
+    handleAttack(event) {
         const { characterId } = event.data;
         const time = event.data.time;
         
@@ -185,7 +173,7 @@ class CombatSystem {
         }
         
         // 공격 처리
-        await this.processAttack(characterId, charState, time);
+        this.processAttack(characterId, charState, time);
         
         // 탄약 소비
         this.consumeAmmo(characterId, 1);
@@ -195,9 +183,8 @@ class CombatSystem {
             const character = this.characterLoader.createCharacter(characterId);
             
             try {
-                const buffSystem = window.container?.get('buffSystem');
                 const staticBuffs = this.stateStore.get('buffs.static') || {};
-                const buffs = buffSystem ? buffSystem.calculateTotalBuffs(characterId, staticBuffs) : {};
+                const buffs = this.buffSystem.calculateTotalBuffs(characterId, staticBuffs);
                 
                 const attackInterval = character.baseStats.attackInterval / (1 + (buffs.attackSpeed || 0));
                 
@@ -225,7 +212,7 @@ class CombatSystem {
     /**
      * 공격 처리
      */
-    async processAttack(characterId, charState, time) {
+    processAttack(characterId, charState, time) {
         const character = this.characterLoader.createCharacter(characterId);
         if (!character) return;
         
@@ -241,9 +228,8 @@ class CombatSystem {
         
         try {
             // 버프 계산 - buffSystem 직접 사용
-            const buffSystem = window.container?.get('buffSystem');
             const staticBuffs = this.stateStore.get('buffs.static') || {};
-            const buffs = buffSystem ? buffSystem.calculateTotalBuffs(characterId, staticBuffs) : {};
+            const buffs = this.buffSystem.calculateTotalBuffs(characterId, staticBuffs);
             
             // 대미지 계산 요청
             this.eventBus.emit(Events.CALCULATE_DAMAGE, {
@@ -333,9 +319,8 @@ class CombatSystem {
         });
         
         // 버프 계산
-        const buffSystem = window.container?.get('buffSystem');
         const staticBuffs = this.stateStore.get('buffs.static') || {};
-        const buffs = buffSystem ? buffSystem.calculateTotalBuffs(characterId, staticBuffs) : {};
+        const buffs = this.buffSystem.calculateTotalBuffs(characterId, staticBuffs);
         
         const reloadTime = character.baseStats.reloadTime / (1 + (buffs.reloadSpeed || 0));
         
@@ -386,9 +371,8 @@ class CombatSystem {
         
         // 버프 계산
         try {
-            const buffSystem = window.container?.get('buffSystem');
             const staticBuffs = this.stateStore.get('buffs.static') || {};
-            const buffs = buffSystem ? buffSystem.calculateTotalBuffs(characterId, staticBuffs) : {};
+            const buffs = this.buffSystem.calculateTotalBuffs(characterId, staticBuffs);
             
             const attackInterval = character.baseStats.attackInterval / (1 + (buffs.attackSpeed || 0));
             

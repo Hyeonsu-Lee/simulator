@@ -416,7 +416,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             timeManager,
             logger,
             characterLoader,
-            configManager
+            configManager,
+            buffSystem,         // 추가
+            damageCalculator    // 추가
         });
         
         // 9. UI 시스템 생성 (의존성 주입)

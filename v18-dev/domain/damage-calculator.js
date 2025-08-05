@@ -3,43 +3,23 @@
 class DamageCalculator {
     constructor(dependencies) {
         this.eventBus = dependencies.eventBus;
-        this.mediator = dependencies.mediator;
         
         // 이벤트 구독
         this.subscribeToEvents();
-        this.registerMediatorHandlers();
     }
     
     subscribeToEvents() {
         this.eventBus.on(Events.CALCULATE_DAMAGE, (event) => this.handleCalculateDamage(event));
     }
     
-    registerMediatorHandlers() {
-        // 즉시 대미지 계산 핸들러
-        this.mediator.registerHandler('CALCULATE_INSTANT_DAMAGE', async (data) => {
-            const { source, damage, buffs } = data;
-            
-            // 최종 공격력 계산
-            const finalAtk = source.baseStats.atk * (1 + (buffs.atkPercent || 0) + (buffs.fixedATK || 0));
-            
-            // 대미지 계산
-            const baseDamage = finalAtk * damage.value;
-            
-            // 버프 적용
-            const finalDamage = baseDamage * (1 + (buffs.damageIncrease || 0));
-            
-            return Math.floor(finalDamage);
-        });
-    }
-    
     /**
      * 대미지 계산 요청 처리
      */
-    async handleCalculateDamage(event) {
+    handleCalculateDamage(event) {
         const { requestId, characterId, character, charState, buffs, config, time } = event.data;
         
         try {
-            const damageResult = await this.calculateDamage(
+            const damageResult = this.calculateDamage(
                 character,
                 charState,
                 buffs,
@@ -75,7 +55,7 @@ class DamageCalculator {
     /**
      * 대미지 계산
      */
-    async calculateDamage(character, charState, buffs, config) {
+    calculateDamage(character, charState, buffs, config) {
         const weaponType = character.baseStats.weaponType || character.weaponType;
         const isFullCharge = weaponType === 'SR' || weaponType === 'RL';
         
@@ -138,7 +118,7 @@ class DamageCalculator {
         const eliteMultiplier = config.eliteCode === 'yes' ? (1 + (buffs.eliteDamage || 0)) : 1;
         
         // 소장품 보너스
-        const collectionBonus = await this.getCollectionBonus(weaponType);
+        const collectionBonus = this.getCollectionBonus(weaponType);
         const collectionMultiplier = collectionBonus.damageMultiplier || 1;
         
         // 거리 보정
@@ -180,7 +160,7 @@ class DamageCalculator {
     /**
      * 소장품 보너스 가져오기
      */
-    async getCollectionBonus(weaponType) {
+    getCollectionBonus(weaponType) {
         return window.COLLECTION_BONUS[weaponType] || {
             coreBonus: 0,
             chargeRatio: 0,
