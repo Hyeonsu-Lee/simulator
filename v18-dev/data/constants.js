@@ -111,23 +111,12 @@ const COLLECTION_BONUS = {
     }
 };
 
-// 명중률 관련 상수
-const BASE_ACCURACY = {
-    AR: 50,
-    SMG: 30,
-    SR: 80,
-    RL: 70,
-    MG: 40,
-    SG: 20
-};
-
-const SPREAD_COEFFICIENT = {
-    AR: 0.5,
-    SMG: 0.8,
-    SR: 0.3,
-    RL: 0.4,
-    MG: 0.7,
-    SG: 1.0
+// 실제 NIKKE 명중률 공식의 무기별 파라미터
+const WEAPON_ACCURACY_PARAMS = {
+    AR: { base: 80, reduction: 0.873 },
+    SMG: { base: 115, reduction: 1.13 },
+    SG: { base: 278, reduction: 2.84 }
+    // SR, RL, MG는 데이터 없음 - 추후 추가 필요
 };
 
 // 전역 노출
@@ -146,28 +135,5 @@ window.STATE_CHECK_INTERVAL = STATE_CHECK_INTERVAL;
 window.CUBE_DATA = CUBE_DATA;
 window.OVERLOAD_OPTIONS = OVERLOAD_OPTIONS;
 window.COLLECTION_BONUS = COLLECTION_BONUS;
-window.BASE_ACCURACY = BASE_ACCURACY;
-window.SPREAD_COEFFICIENT = SPREAD_COEFFICIENT;
+window.WEAPON_ACCURACY_PARAMS = WEAPON_ACCURACY_PARAMS;
 
-// 내보내기
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {
-        CRIT_RATE,
-        CRIT_DMG,
-        ENEMY_DEF,
-        OPTIMAL_DISTANCE,
-        BURST_GAUGE_CHARGE_TIME,
-        BURST_CYCLE_TIME,
-        BURST_USE_DELAY,
-        FULL_BURST_DURATION,
-        BURST_COOLDOWN_MAP,
-        UI_UPDATE_INTERVAL,
-        MULTI_HIT_INTERVAL,
-        STATE_CHECK_INTERVAL,
-        CUBE_DATA,
-        OVERLOAD_OPTIONS,
-        COLLECTION_BONUS,
-        BASE_ACCURACY,
-        SPREAD_COEFFICIENT
-    };
-}

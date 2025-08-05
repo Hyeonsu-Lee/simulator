@@ -10,46 +10,6 @@ function checkProbability(probability) {
 }
 
 /**
- * 산포도 계산
- * @param {string} weaponType - 무기 타입
- * @param {number} accuracy - 명중률 보정
- * @returns {number} 산포도 직경
- */
-function calculateSpreadDiameter(weaponType, accuracy) {
-    const baseAccuracy = BASE_ACCURACY[weaponType] || 50;
-    const coefficient = SPREAD_COEFFICIENT[weaponType] || 0.5;
-    
-    // 명중률이 높을수록 산포도가 작아짐
-    const totalAccuracy = baseAccuracy + accuracy;
-    const spread = 100 / (1 + totalAccuracy / 100) * coefficient;
-    
-    return Math.max(5, spread); // 최소 산포도 5
-}
-
-/**
- * 코어 히트율 계산
- * @param {number} spread - 산포도
- * @param {number} coreSize - 코어 크기
- * @param {string} weaponType - 무기 타입
- * @returns {number} 0~1 사이의 확률
- */
-function calculateCoreHitRate(spread, coreSize, weaponType) {
-    if (coreSize === 0) return 0;
-    
-    // 산포도가 작을수록, 코어가 클수록 히트율 증가
-    let hitRate = coreSize / spread;
-    
-    // 무기별 보정
-    if (weaponType === 'SR' || weaponType === 'RL') {
-        hitRate *= 1.2; // 저격총/로켓은 명중률 보정
-    } else if (weaponType === 'SG') {
-        hitRate *= 0.8; // 샷건은 펠릿 분산으로 인한 페널티
-    }
-    
-    return Math.min(1, Math.max(0, hitRate));
-}
-
-/**
  * 숫자 포맷팅 (천 단위 콤마)
  * @param {number} num - 숫자
  * @returns {string}

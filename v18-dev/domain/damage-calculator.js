@@ -78,7 +78,7 @@ class DamageCalculator {
         const totalAccuracy = accuracy + (buffs.accuracy || 0);
         
         // 코어 히트율 계산
-        const spread = this.calculateSpread(weaponType, totalAccuracy, config.distance);
+        const spread = this.calculateSpread(weaponType, totalAccuracy);
         const coreHitRate = this.calculateCoreHitRate(spread, config.coreSize, weaponType);
         
         // 펠릿당 계산
@@ -172,32 +172,51 @@ class DamageCalculator {
     /**
      * 분산도 계산
      */
-    calculateSpread(weaponType, accuracy, distance) {
-        // 상수 사용
-        const baseAccuracy = window.BASE_ACCURACY[weaponType] || 50;
-        const coefficient = window.SPREAD_COEFFICIENT[weaponType] || 0.5;
+    calculateSpread(weaponType, accuracy) {
+        // RL, SR, MG는 탄착원 계산 불필요 (항상 명중)
+        if (weaponType === 'RL' || weaponType === 'SR' || weaponType === 'MG') {
+            return 0; // 또는 의미없는 작은 값
+        }
         
-        const totalAccuracy = baseAccuracy + accuracy;
-        const spread = 100 / (1 + totalAccuracy / 100) * coefficient;
+        // AR, SMG, SG만 실제 공식 적용
+        const params = window.WEAPON_ACCURACY_PARAMS[weaponType];
         
-        return Math.max(5, spread);
+        if (!params) {
+            console.warn(`No accuracy params for weapon type: ${weaponType}`);
+            return 5; // 기본값
+        }
+        
+        // 실제 공식: 탄착원 = base - reduction × Hit_Rate(%)
+        const hitRate = accuracy; // accuracy가 Hit Rate %로 사용됨
+        const spread = params.base - params.reduction * hitRate;
+        return Math.max(spread, 1); // 최소값 1
     }
     
     /**
      * 코어 히트율 계산 (유틸 함수)
      */
     calculateCoreHitRate(spread, coreSize, weaponType) {
-        if (coreSize === 0) return 0;
-        
-        let hitRate = coreSize / spread;
-        
-        if (weaponType === 'SR' || weaponType === 'RL') {
-            hitRate *= 1.2;
-        } else if (weaponType === 'SG') {
-            hitRate *= 0.8;
+        // RL, SR, MG는 항상 100% 명중
+        if (weaponType === 'RL' || weaponType === 'SR' || weaponType === 'MG') {
+            return 1.0;
         }
         
-        return Math.min(1, Math.max(0, hitRate));
+        if (coreSize === 0) return 0;
+        
+        // 탄착원이 코어보다 작거나 같으면 100% 명중
+        if (spread <= coreSize) {
+            return 1.0;
+        }
+        
+        // AR, SMG, SG만 가우시안 분포 확률 계산
+        const sigmaRatio = weaponType === 'SG' ? 3 : 4;
+        const sigma = spread / sigmaRatio;
+        const coreRadius = coreSize / 2;
+        
+        // 2D 가우시안 분포 확률 공식
+        const hitProbability = 1 - Math.exp(-(coreRadius * coreRadius) / (2 * sigma * sigma));
+        
+        return Math.min(hitProbability, 1.0);
     }
 }
 

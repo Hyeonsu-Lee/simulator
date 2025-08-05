@@ -168,15 +168,12 @@ class BuffSystem {
      * 캐릭터의 총 버프 계산
      */
     calculateTotalBuffs(characterId, staticBuffs = {}) {
-        // 기본 크리티컬 상수
-        const CRIT_RATE = 0.15;
-        const CRIT_DMG = 0.5;
         
         const buffs = {
             // 기본값
             atkPercent: 0,
-            critRate: CRIT_RATE,
-            critDamage: CRIT_DMG,
+            critRate: window.CRIT_RATE,
+            critDamage: window.CRIT_DMG,
             fixedATK: 0,
             accuracy: 0,
             damageIncrease: 0,
