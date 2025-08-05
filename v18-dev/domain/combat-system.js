@@ -2,6 +2,8 @@
 
 class CombatSystem {
     constructor(dependencies) {
+        console.log('[CombatSystem] Constructor called');
+        
         this.eventBus = dependencies.eventBus;
         this.mediator = dependencies.mediator;
         this.stateStore = dependencies.stateStore;
@@ -11,12 +13,18 @@ class CombatSystem {
         this.configManager = dependencies.configManager;
         
         this.running = false;
+        
+        // 이벤트 구독
         this.subscribeToEvents();
         this.registerMediatorHandlers();
+        
+        console.log('[CombatSystem] Constructor complete');
     }
     
     subscribeToEvents() {
-        this.eventBus.on(Events.START, () => this.start());
+        console.log('[CombatSystem] Subscribing to events');
+        
+        // START 이벤트 구독 제거 - SimulationController에서 직접 호출
         this.eventBus.on(Events.STOP, () => this.stop());
         this.eventBus.on(Events.TICK, (event) => this.handleTick(event));
         
@@ -33,39 +41,41 @@ class CombatSystem {
         this.eventBus.on(Events.BURST_READY, (event) => this.handleBurstReady(event));
         this.eventBus.on(Events.BURST_USE, (event) => this.handleBurstUse(event));
         this.eventBus.on(Events.FULL_BURST_END, (event) => this.handleFullBurstEnd(event));
+        
+        console.log('[CombatSystem] Event subscription complete');
     }
     
     registerMediatorHandlers() {
         // 컬렉션 보너스 핸들러
         this.mediator.registerHandler('GET_COLLECTION_BONUS', async (data) => {
-            // DamageCalculator에서 직접 가져오기
-            const damageCalculator = window.container?.get('damageCalculator');
-            if (damageCalculator) {
-                return damageCalculator.getCollectionBonus(data.weaponType);
-            }
-            return { coreBonus: 0, chargeRatio: 0, damageMultiplier: 1, maxAmmo: 0 };
+            // DamageCalculator에서 처리
+            return null;
         });
     }
     
     /**
-     * 전투 시작
+     * 시작
      */
     start() {
-        console.log('[CombatSystem] Starting combat');
+        if (this.running) return;
+        
+        console.log('[CombatSystem] Starting');
         this.running = true;
+        
+        // 초기 설정 로그
+        this.logInitialSettings();
         
         // 초기 이벤트 스케줄
         this.scheduleInitialEvents();
         
-        // 로그
-        this.logger.buff(0, '=== 시뮬레이션 시작 ===');
-        this.logInitialSettings();
+        console.log('[CombatSystem] Combat system started successfully');
     }
     
     /**
-     * 전투 중지
+     * 중지
      */
     stop() {
+        console.log('[CombatSystem] Stopping');
         this.running = false;
     }
     
@@ -73,28 +83,36 @@ class CombatSystem {
      * 초기 이벤트 스케줄
      */
     scheduleInitialEvents() {
-        const config = this.stateStore.get('config');
         const squad = this.stateStore.get('squad.members');
         const targetIndex = this.stateStore.get('squad.targetIndex');
         
-        console.log('[CombatSystem] Squad:', squad, 'Target index:', targetIndex);
+        console.log('[CombatSystem] Scheduling initial events');
+        console.log('[CombatSystem] Squad:', squad);
+        console.log('[CombatSystem] Target index:', targetIndex);
         
         // 전투 시작 이벤트
-        this.timeManager.schedule(0, Events.BATTLE_START, {}, 0);
+        this.eventBus.emit(Events.BATTLE_START, { time: 0 });
         
-        // 타겟 캐릭터 첫 공격
-        const targetCharId = squad[targetIndex];
-        if (targetCharId) {
-            const character = this.characterLoader.createCharacter(targetCharId);
+        // 타겟 캐릭터 첫 공격 스케줄
+        const targetId = squad[targetIndex];
+        if (targetId) {
+            const character = this.characterLoader.createCharacter(targetId);
             if (character) {
-                console.log(`[CombatSystem] Scheduling first attack for ${targetCharId} at ${character.baseStats.attackInterval}s`);
+                const firstAttackTime = character.baseStats.attackInterval;
+                console.log(`[CombatSystem] Scheduling first attack for ${targetId} at ${firstAttackTime}s`);
+                
+                // 첫 공격 스케줄
                 this.timeManager.schedule(
-                    character.baseStats.attackInterval,
+                    firstAttackTime,
                     Events.ATTACK,
-                    { characterId: targetCharId },
+                    { characterId: targetId },
                     5
                 );
+            } else {
+                console.error(`[CombatSystem] Failed to create character ${targetId}`);
             }
+        } else {
+            console.error(`[CombatSystem] No target character found at index ${targetIndex}`);
         }
         
         // 타겟이 아닌 캐릭터들의 특수 동작 처리
@@ -119,6 +137,8 @@ class CombatSystem {
             1
         );
         
+        console.log(`[CombatSystem] Scheduled BURST_READY at ${BURST_GAUGE_CHARGE_TIME}s`);
+        
         // 주기적 체크
         this.timeManager.scheduleRepeating(
             0.1,
@@ -127,6 +147,9 @@ class CombatSystem {
             {},
             Infinity
         );
+        
+        console.log('[CombatSystem] Initial events scheduled successfully');
+        console.log('[CombatSystem] TimeManager queue size:', this.timeManager.getQueueSize());
     }
     
     /**
@@ -301,7 +324,14 @@ class CombatSystem {
             cs.totalPellets += damageResult.pelletsHit;
             
             // 누적 카운터
-            cs.attackCount++;
+            cs.attackCount = (cs.attackCount || 0) + 1;
+            
+            // globalCounters가 없으면 초기화
+            if (!state.combat.globalCounters) {
+                state.combat.globalCounters = {
+                    bulletsConsumed: 0
+                };
+            }
             state.combat.globalCounters.bulletsConsumed++;
             
             return state;
@@ -365,34 +395,40 @@ class CombatSystem {
                 damageCalculator.getCollectionBonus(character.weaponType) : 
                 { maxAmmo: 0 };
             
-            const maxAmmo = Math.floor(character.baseStats.baseAmmo * 
-                (1 + (buffs.maxAmmo || 0) + (collectionBonus.maxAmmo || 0)));
+            const baseAmmo = character.baseStats.baseAmmo;
+            const maxAmmo = Math.floor(baseAmmo * 
+                (1 + collectionBonus.maxAmmo + (buffs.maxAmmo || 0)));
             
-            // 탄약 충전
             this.stateStore.update(state => {
-                const charState = state.combat.characters[characterId];
-                if (charState) {
-                    charState.maxAmmo = maxAmmo;
-                    charState.currentAmmo = maxAmmo;
-                    charState.reloadCount++;
+                const cs = state.combat.characters[characterId];
+                if (cs) {
+                    cs.isReloading = true;
+                    cs.reloadEndTime = time + reloadTime;
+                    cs.reloadCount++;
+                    cs.maxAmmo = maxAmmo;
                 }
                 return state;
             });
             
-            this.logger.reload(time, 
-                `재장전 (${reloadTime.toFixed(3)}초, 탄창: ${maxAmmo})`
-            );
+            this.logger.log(time, `재장전 시작 (${reloadTime.toFixed(2)}초)`);
             
-            // 다음 공격 스케줄
+            // 재장전 완료 스케줄
             this.timeManager.schedule(
                 time + reloadTime,
-                Events.ATTACK,
-                { characterId },
-                5
+                Events.AMMO_CHANGE,
+                { characterId, type: 'reload', amount: maxAmmo },
+                6
             );
         } catch (error) {
-            this.logger.error(time, `재장전 처리 실패 [${characterId}]: ${error.message}`);
             console.error('[CombatSystem] Reload error:', error);
+            // 기본 재장전 처리
+            const baseReloadTime = character.baseStats.reloadTime;
+            this.timeManager.schedule(
+                time + baseReloadTime,
+                Events.AMMO_CHANGE,
+                { characterId, type: 'reload', amount: character.baseStats.baseAmmo },
+                6
+            );
         }
     }
     
@@ -406,7 +442,23 @@ class CombatSystem {
             const charState = state.combat.characters[characterId];
             if (!charState) return state;
             
-            if (type === 'charge') {
+            if (type === 'reload') {
+                charState.currentAmmo = charState.maxAmmo;
+                charState.isReloading = false;
+                charState.reloadEndTime = 0;
+                
+                this.logger.log(event.data.time, 
+                    `재장전 완료 (${charState.currentAmmo}/${charState.maxAmmo})`
+                );
+                
+                // 다음 공격 스케줄
+                this.timeManager.schedule(
+                    event.data.time,
+                    Events.ATTACK,
+                    { characterId },
+                    5
+                );
+            } else if (type === 'charge') {
                 const chargeAmount = Math.floor(charState.maxAmmo * amount);
                 charState.currentAmmo = Math.min(
                     charState.currentAmmo + chargeAmount,
@@ -444,7 +496,7 @@ class CombatSystem {
             this.timeManager.schedule(
                 event.data.time + delay,
                 Events.BURST_USE,
-                { character, position: character.burstPosition },
+                { characterId: character.id, position: character.burstPosition },
                 1
             );
             delay += 0.143;
@@ -489,22 +541,36 @@ class CombatSystem {
      */
     determineBurstOrder() {
         const squad = this.stateStore.get('squad.members');
-        const cooldowns = this.stateStore.get('burst.cooldowns');
+        const cooldowns = this.stateStore.get('burst.cooldowns') || new Map();
         const currentTime = this.timeManager.currentTime;
         
         const available = [];
         
         for (let position = 1; position <= 3; position++) {
             const candidates = squad
-                .map(id => id ? this.characterLoader.createCharacter(id) : null)
-                .filter(char => 
-                    char && 
-                    char.burstPosition === position &&
-                    (!cooldowns[char.id] || cooldowns[char.id] <= currentTime)
-                );
+                .filter(id => id) // null 체크 추가
+                .map(id => {
+                    const character = this.characterLoader.createCharacter(id);
+                    return character ? { id, character } : null;
+                })
+                .filter(data => data) // null 체크
+                .filter(({ character }) => character.burstPosition === position)
+                .filter(({ id }) => {
+                    // Map인지 확인하고 적절한 방법으로 접근
+                    const lastUsed = cooldowns instanceof Map ? 
+                        (cooldowns.get(id) || -Infinity) : 
+                        (cooldowns[id] || -Infinity);
+                    const character = this.characterLoader.createCharacter(id);
+                    return character && currentTime >= lastUsed + character.burstCooldown;
+                });
             
             if (candidates.length > 0) {
-                available.push(candidates[0]);
+                // 우선순위: 타겟 > 스쿼드 순서
+                const targetIndex = this.stateStore.get('squad.targetIndex');
+                const targetId = squad[targetIndex];
+                
+                const selected = candidates.find(({ id }) => id === targetId) || candidates[0];
+                available.push(selected.character);
             }
         }
         
@@ -515,35 +581,56 @@ class CombatSystem {
      * 버스트 사용 처리
      */
     handleBurstUse(event) {
-        const { character, position } = event.data;
+        const { characterId, position } = event.data;
+        const time = event.data.time;
         
-        // 버스트 사용 기록
+        this.logger.buff(time, `[${characterId}] ${position}버스트 사용!`);
+        
+        // 쿨다운 기록
         this.stateStore.update(state => {
-            state.burst.users.push(character.id);
+            if (!state.burst.cooldowns) {
+                state.burst.cooldowns = new Map();
+            }
             
-            // 버스트 쿨다운 설정
-            const BURST_COOLDOWN_MAP = { 20: 20, 40: 40, 60: 60 };
-            const realCooldown = BURST_COOLDOWN_MAP[character.burstCooldown] || character.burstCooldown;
-            state.burst.cooldowns[character.id] = event.data.time + realCooldown;
+            // Map인지 확인하고 적절한 방법으로 설정
+            if (state.burst.cooldowns instanceof Map) {
+                state.burst.cooldowns.set(characterId, time);
+            } else {
+                // 일반 객체인 경우 Map으로 변환
+                const cooldownMap = new Map(Object.entries(state.burst.cooldowns || {}));
+                cooldownMap.set(characterId, time);
+                state.burst.cooldowns = cooldownMap;
+            }
+            
+            // 버스트 사용자 기록
+            if (position === 1) state.burst.burst1User = characterId;
+            else if (position === 2) state.burst.burst2User = characterId;
+            else if (position === 3) state.burst.burst3User = characterId;
             
             return state;
         });
         
-        // 로그
-        const burstSkill = character.skills?.burst;
-        if (burstSkill) {
-            this.logger.skill(event.data.time, 
-                `[${character.name}] ${burstSkill.name} 발동`
-            );
-        }
+        // 버스트 스킬 발동
+        this.eventBus.emit(Events.SKILL_TRIGGER, {
+            characterId,
+            skillType: 'burst',
+            time
+        });
     }
     
     /**
      * 풀버스트 종료 처리
      */
     handleFullBurstEnd(event) {
+        const time = event.data.time;
+        
+        this.logger.buff(time, '풀버스트 종료');
+        
         this.stateStore.update(state => {
             state.burst.fullBurst = false;
+            state.burst.burst1User = null;
+            state.burst.burst2User = null;
+            state.burst.burst3User = null;
             return state;
         });
     }
@@ -565,10 +652,10 @@ class CombatSystem {
      * 통계 업데이트
      */
     updateStats() {
-        const combat = this.stateStore.get('combat');
         const targetIndex = this.stateStore.get('squad.targetIndex');
         const targetId = this.stateStore.get('squad.members')[targetIndex];
-        const targetState = combat.characters[targetId];
+        const targetState = this.stateStore.get(`combat.characters.${targetId}`);
+        const combat = this.stateStore.get('combat');
         
         if (!targetState) return;
         
@@ -718,7 +805,9 @@ class CombatSystem {
 }
 
 // 전역 노출
-window.CombatSystem = CombatSystem;
+if (typeof window !== 'undefined' && !window.CombatSystem) {
+    window.CombatSystem = CombatSystem;
+}
 
 // 내보내기
 if (typeof module !== 'undefined' && module.exports) {

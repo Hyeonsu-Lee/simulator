@@ -1,73 +1,82 @@
-// main.js - 메인 애플리케이션 (하이브리드 방식)
+// main.js - v18 하이브리드 메인 진입점
 
 class SimulationController {
-    constructor(dependencies) {
-        this.eventBus = dependencies.eventBus;
-        this.mediator = dependencies.mediator;
-        this.stateStore = dependencies.stateStore;
-        this.timeManager = dependencies.timeManager;
-        this.logger = dependencies.logger;
-        this.characterLoader = dependencies.characterLoader;
-        this.configManager = dependencies.configManager;
-        this.combatSystem = dependencies.combatSystem;
-        this.buffSystem = dependencies.buffSystem;
-        this.skillSystem = dependencies.skillSystem;
-        this.damageCalculator = dependencies.damageCalculator;
-        this.uiController = dependencies.uiController;
-        this.simulationView = dependencies.simulationView;
+    constructor(dependencies = {}) {
+        // 의존성 주입
+        Object.assign(this, dependencies);
         
-        this.multiRunResults = [];
-        this.currentRun = 0;
-        this.totalRuns = 1;
-        
-        // 프레임 루프 관련 추가
+        // 프레임 루프 관련
         this.frameLoopId = null;
         this.lastFrameTime = 0;
-        this.runConfig = null;
-    }
-    
-    /**
-     * 초기화
-     */
-    async initialize() {
-        // 캐릭터 데이터 로드
-        await this.characterLoader.loadAll();
         
-        // UI 초기화 (캐릭터 로드 완료 후)
-        await this.uiController.initialize();
-        
-        // 초기 상태 설정
-        this.setupInitialState();
-        
-        // 이벤트 리스너
+        // 이벤트 핸들러 설정
         this.setupEventListeners();
-        
-        console.log('Simulation Controller initialized');
     }
     
     /**
-     * 초기 상태 설정 (async 제거)
+     * 초기 상태 설정
      */
     setupInitialState() {
         console.log('[SimulationController] Setting up initial state');
         
-        // 캐릭터 상태 초기화
+        // 현재 설정된 스쿼드 가져오기
         const squad = this.configManager.config.squad.members;
-        console.log('[SimulationController] Squad from config:', squad);
+        const targetIndex = this.configManager.config.squad.targetIndex;
         
+        console.log('[SimulationController] Squad:', squad);
+        console.log('[SimulationController] Target index:', targetIndex);
+        
+        // 스쿼드 상태 설정
+        this.stateStore.set('squad', {
+            members: squad,
+            targetIndex: targetIndex
+        });
+        
+        // 전투 상태 설정
+        this.stateStore.set('combat', {
+            time: 0,
+            targetIndex: targetIndex,
+            distance: this.configManager.config.simulation.distance,
+            burstStartTime: 2.43,
+            burstCycleTime: 20,
+            started: false,
+            characters: {},
+            globalCounters: {
+                bulletsConsumed: 0
+            }
+        });
+        
+        // 버스트 상태 설정
+        this.stateStore.set('burst', {
+            currentCycle: 0,
+            burstStarted: false,
+            burst1User: null,
+            burst2User: null,
+            burst3User: null,
+            isFullBurst: false,
+            lastBurstTimes: new Map(),
+            cooldowns: new Map()  // cooldowns 추가
+        });
+        
+        // 버프 상태 설정
+        this.stateStore.set('buffs', {
+            static: {},
+            dynamic: new Map()
+        });
+        
+        // 각 캐릭터 초기화
         squad.forEach((characterId, index) => {
             if (!characterId) return;
             
-            console.log(`[SimulationController] Initializing character ${characterId} at index ${index}`);
-            
-            const charConfig = this.configManager.config.characters.get(characterId) || {
+            // 캐릭터 설정 가져오기
+            const charConfig = this.configManager.config.characters[characterId] || {
                 level: 200,
                 coreLevel: 10,
                 skills: { skill1: 10, skill2: 10, burst: 10 }
             };
             
-            // 캐릭터 생성
-            const character = this.characterLoader.create(characterId, {
+            // 캐릭터 생성 - createCharacter 메서드 사용
+            const character = this.characterLoader.createCharacter(characterId, {
                 level: charConfig.level,
                 coreLevel: charConfig.coreLevel,
                 skillLevels: charConfig.skills
@@ -95,7 +104,8 @@ class SimulationController {
                     isReloading: false,
                     reloadEndTime: 0,
                     activeBuffs: new Map(),
-                    passiveSkillsApplied: false
+                    passiveSkillsApplied: false,
+                    attackCount: 0  // attackCount 추가
                 };
                 
                 console.log(`[SimulationController] Character state for ${characterId}:`, characterState);
@@ -117,114 +127,71 @@ class SimulationController {
     setupEventListeners() {
         this.eventBus.on(Events.START, () => this.startSimulation());
         this.eventBus.on(Events.STOP, () => this.stopSimulation());
-        this.eventBus.on(Events.RUN_COMPLETE, (event) => this.handleRunComplete(event));
-        this.eventBus.on(Events.SIMULATION_COMPLETE, (event) => this.handleSimulationComplete(event));
+        this.eventBus.on(Events.RESET, () => this.resetSystems());
+        this.eventBus.on(Events.COMPLETE, (event) => this.handleComplete(event));
     }
     
     /**
      * 시뮬레이션 시작
      */
     async startSimulation() {
+        console.log('[SimulationController] Starting simulation');
+        
         try {
-            console.log('[SimulationController] Starting simulation');
+            // 시스템 리셋
+            this.resetSystems();
             
-            // 초기화
-            this.multiRunResults = [];
-            this.totalRuns = this.configManager.config.simulation.runCount;
+            // 초기 상태 설정
+            this.setupInitialState();
             
-            this.logger.clear();
+            // UI 초기화
             this.simulationView.clearResults();
+            this.simulationView.setSimulationRunning(true);
             
-            // 멀티런 처리
-            for (this.currentRun = 0; this.currentRun < this.totalRuns; this.currentRun++) {
-                if (!this.timeManager.running && this.currentRun > 0) break;
-                
-                if (this.totalRuns > 1) {
-                    this.logger.buff(0, `===== 시뮬레이션 ${this.currentRun + 1}/${this.totalRuns} 시작 =====`);
-                }
-                
-                console.log(`[SimulationController] Run ${this.currentRun + 1}/${this.totalRuns} starting`);
-                
-                // 시스템 리셋
-                this.resetSystems();
-                
-                // 초기 상태 재설정
-                this.setupInitialState();
-                
-                // 시스템 초기화
-                this.skillSystem.initialize();
-                
-                // 정적 버프 초기화
-                const staticBuffs = {
-                    ...this.configManager.calculateOverloadBuffs(),
-                    ...this.getCubeBuffs()
-                };
-                
-                this.stateStore.set('buffs.static', staticBuffs);
-                
-                console.log('[SimulationController] Static buffs set:', staticBuffs);
-                
-                // 전투 시작
-                this.combatSystem.start();
-                
-                // 시뮬레이션 실행 (수정된 부분)
-                this.runConfig = this.timeManager.run(
-                    this.configManager.config.simulation.duration,
-                    this.configManager.config.simulation.speed,
-                    (currentTime) => {
-                        this.eventBus.emit(Events.PROGRESS_UPDATE, {
-                            current: currentTime,
-                            total: this.configManager.config.simulation.duration
-                        });
-                    }
-                );
-                
-                // 프레임 루프 시작
-                this.lastFrameTime = performance.now();
-                await this.runFrameLoop();
-                
-                console.log(`[SimulationController] Run ${this.currentRun + 1} completed`);
-                
-                // 실행 완료
-                const result = this.collectResults();
-                this.multiRunResults.push(result);
-                
-                this.eventBus.emit(Events.RUN_COMPLETE, { 
-                    run: this.currentRun + 1,
-                    result 
-                });
-                
-                // 다음 실행 전 대기
-                if (this.currentRun < this.totalRuns - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                }
-            }
+            // 전투 시스템 시작
+            this.combatSystem.start();
             
-            // 전체 완료
-            this.eventBus.emit(Events.SIMULATION_COMPLETE, {
-                results: this.multiRunResults
+            // 시뮬레이션 설정
+            const duration = this.configManager.config.simulation.duration || 30;
+            const speed = this.configManager.config.simulation.speed || 1;
+            
+            // TimeManager 실행 (하이브리드 모드)
+            const runConfig = this.timeManager.run(duration, speed, (currentTime) => {
+                // 프로그레스 업데이트
+                if (Math.floor(currentTime * 10) % 10 === 0) {
+                    this.updateProgress(currentTime, duration);
+                }
             });
             
+            // 프레임 루프 시작
+            await this.runFrameLoop(runConfig);
+            
+            // 시뮬레이션 완료
+            console.log('[SimulationController] Simulation completed');
+            this.handleSimulationComplete();
+            
         } catch (error) {
-            console.error('Simulation error:', error);
-            this.stopSimulation();
+            console.error('[SimulationController] Simulation error:', error);
+            this.eventBus.emit(Events.ERROR, { error });
         }
     }
     
     /**
-     * 프레임 루프
+     * 프레임 루프 실행
      */
-    runFrameLoop() {
+    async runFrameLoop(runConfig) {
         return new Promise((resolve) => {
+            this.lastFrameTime = performance.now();
+            
             const frameLoop = () => {
-                const currentTime = performance.now();
-                const deltaTime = (currentTime - this.lastFrameTime) / 1000; // 초 단위
-                this.lastFrameTime = currentTime;
+                const currentFrameTime = performance.now();
+                const deltaTime = (currentFrameTime - this.lastFrameTime) / 1000;
+                this.lastFrameTime = currentFrameTime;
                 
-                // 프레임 처리
-                const continueRunning = this.runConfig.processFrame(deltaTime);
+                // TimeManager 프레임 처리
+                const shouldContinue = runConfig.processFrame(deltaTime);
                 
-                if (continueRunning && this.timeManager.running) {
+                if (shouldContinue) {
                     this.frameLoopId = requestAnimationFrame(frameLoop);
                 } else {
                     // 완료
@@ -271,7 +238,10 @@ class SimulationController {
             burstStartTime: 2.43,
             burstCycleTime: 20,
             started: false,
-            characters: {}
+            characters: {},
+            globalCounters: {
+                bulletsConsumed: 0
+            }
         });
         
         // 버스트 상태 초기화
@@ -308,61 +278,47 @@ class SimulationController {
             shotCount: targetState.shotsFired,
             coreHitRate: targetState.totalPellets > 0 ? 
                 (targetState.coreHitCount / targetState.totalPellets * 100) : 0,
-            critRate: targetState.totalPellets > 0 ? 
+            critRate: targetState.totalPellets > 0 ?
                 (targetState.critCount / targetState.totalPellets * 100) : 0,
             reloadCount: targetState.reloadCount,
-            skill1Count: targetState.skill1Count || 0,
-            totalPellets: targetState.totalPellets
+            skill1Count: targetState.skill1Count
         };
     }
     
     /**
-     * 큐브 버프 가져오기
+     * 시뮬레이션 완료 처리
      */
-    getCubeBuffs() {
-        const cubeType = this.configManager.config.simulation.cubeType;
-        if (!cubeType || !CUBE_DATA[cubeType]) {
-            return {};
-        }
+    handleSimulationComplete() {
+        const results = this.collectResults();
+        console.log('[SimulationController] Results:', results);
         
-        return CUBE_DATA[cubeType].effects;
+        // 결과 화면 렌더링
+        this.simulationView.showResults([results]);
+        this.simulationView.setSimulationRunning(false);
+        
+        // 완료 이벤트
+        this.eventBus.emit(Events.SIMULATION_COMPLETE, { results });
     }
     
     /**
-     * 실행 완료 핸들러
+     * 완료 이벤트 핸들러
      */
-    handleRunComplete(event) {
-        console.log(`Run ${event.data.run} complete:`, event.data.result);
+    handleComplete(event) {
+        console.log('[SimulationController] Simulation complete event received');
     }
     
     /**
-     * 시뮬레이션 완료 핸들러
+     * 진행률 업데이트
      */
-    handleSimulationComplete(event) {
-        this.simulationView.showResults(event.data.results);
-        
-        // 최종 로그
-        const results = event.data.results;
-        const avgDPS = Math.floor(results.reduce((sum, r) => sum + r.dps, 0) / results.length);
-        
-        this.logger.buff(this.timeManager.currentTime,
-            `[시뮬레이션 완료] 평균 DPS: ${formatNumber(avgDPS)}`
-        );
+    updateProgress(currentTime, duration) {
+        const progress = Math.min((currentTime / duration) * 100, 100);
+        this.simulationView.updateProgress(currentTime, duration);
     }
 }
 
-/**
- * 유틸리티 함수
- */
-function formatNumber(num) {
-    return num.toLocaleString('ko-KR');
-}
-
-/**
- * 메인 초기화 함수
- */
-async function initializeApplication() {
-    console.log('Initializing Nikke Simulator...');
+// DOMContentLoaded 이벤트
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('[Main] Initializing...');
     
     try {
         // 1. 보안 코드
@@ -374,19 +330,30 @@ async function initializeApplication() {
         // 2. 의존성 컨테이너 생성
         const container = new DependencyContainer();
         
-        // 3. 이벤트 버스 생성 (전역)
+        // 3. 이벤트 버스 생성
         window.eventBus = new EventBus();
         
-        // 4. StateStore의 초기 상태 가져오기
-        const initialState = typeof window.initialState !== 'undefined' ? window.initialState : {
+        // Events가 정의되어 있는지 확인
+        console.log('[Main] Events.START:', Events.START);
+        console.log('[Main] Events available:', typeof Events !== 'undefined');
+        
+        // 4. 초기 상태 정의
+        const initialState = {
+            squad: {
+                members: [null, null, null, null, null],
+                targetIndex: 0
+            },
             combat: {
                 time: 0,
                 targetIndex: 0,
-                distance: 2,
+                distance: 250,
                 burstStartTime: 2.43,
                 burstCycleTime: 20,
                 started: false,
-                characters: {}
+                characters: {},
+                globalCounters: {
+                    bulletsConsumed: 0
+                }
             },
             burst: {
                 currentCycle: 0,
@@ -414,6 +381,9 @@ async function initializeApplication() {
         // 6. 인프라 초기화
         const characterLoader = new CharacterLoader();
         const configManager = new ConfigManager();
+        
+        // 캐릭터 데이터 로드
+        await characterLoader.loadAll();
         
         // 7. 미디에이터 초기화
         const mediator = new EventMediator(window.eventBus);
@@ -454,7 +424,6 @@ async function initializeApplication() {
         // 9. UI 시스템 생성 (의존성 주입)
         const simulationView = new SimulationView();
         
-        
         const uiController = new UIController({
             eventBus: window.eventBus,
             stateStore,
@@ -480,7 +449,7 @@ async function initializeApplication() {
             simulationView
         });
         
-        // 8. 의존성 컨테이너에 등록
+        // 11. 의존성 컨테이너에 등록
         container.register('eventBus', window.eventBus);
         container.register('mediator', mediator);
         container.register('stateStore', stateStore);
@@ -496,47 +465,15 @@ async function initializeApplication() {
         container.register('simulationView', simulationView);
         container.register('simulationController', simulationController);
         
-        // 9. 이벤트 레코더 생성 (선택적)
-        const eventRecorder = new EventRecorder(window.eventBus);
-        container.register('eventRecorder', eventRecorder);
+        // 12. 전역 노출 (호환성)
+        window.container = container;
         
-        // 10. 순환 의존성 검사 (hasCircularDependency가 없을 수 있음)
-        if (container.hasCircularDependency && container.hasCircularDependency()) {
-            throw new Error('Circular dependency detected!');
-        }
+        // 13. UI 초기화
+        await uiController.initialize();
         
-        // 11. 시뮬레이션 컨트롤러 초기화
-        await simulationController.initialize();
-        
-        // 12. 전역 함수 노출 (하위 호환성)
-        window.startSimulation = () => window.eventBus.emit(Events.START);
-        window.stopSimulation = () => window.eventBus.emit(Events.STOP);
-        window.downloadFullLog = () => logger.download();
-        
-        // 디버그용 컨테이너 노출 (프로덕션에서는 제거)
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-            window.container = container;
-            window.eventRecorder = eventRecorder;
-        }
-        
-        // 종료 시 리소스 정리
-        window.addEventListener('beforeunload', () => {
-            // 모든 시스템 정리
-            container.list().forEach(serviceName => {
-                const service = container.get(serviceName);
-                if (service && typeof service.destroy === 'function') {
-                    service.destroy();
-                }
-            });
-        });
-        
-        console.log('Nikke Simulator ready');
+        console.log('[Main] Initialization complete');
         
     } catch (error) {
-        console.error('Failed to initialize:', error);
-        alert('시뮬레이터 초기화 실패: ' + error.message);
+        console.error('[Main] Initialization error:', error);
     }
-}
-
-// 페이지 로드 완료 후 초기화
-window.addEventListener('DOMContentLoaded', initializeApplication);
+});

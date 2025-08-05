@@ -9,6 +9,7 @@ class TimeManager {
         this.eventId = 0;
         this.processingTime = 0; // 현재 처리 중인 이벤트의 시간
         this.frameCallbacks = []; // 프레임 콜백
+        this.repeatingEvents = new Map(); // 반복 이벤트 관리
     }
     
     /**
@@ -43,6 +44,42 @@ class TimeManager {
         this.events.splice(insertIndex, 0, event);
         
         return event.id;
+    }
+    
+    /**
+     * 반복 이벤트 스케줄
+     * @param {number} startTime - 시작 시간
+     * @param {number} interval - 반복 간격
+     * @param {string} type - 이벤트 타입
+     * @param {Object} data - 이벤트 데이터
+     * @param {number} count - 반복 횟수 (Infinity 가능)
+     * @param {number} priority - 우선순위
+     */
+    scheduleRepeating(startTime, interval, type, data = {}, count = Infinity, priority = 5) {
+        const repeatingId = ++this.eventId;
+        
+        this.repeatingEvents.set(repeatingId, {
+            type,
+            data,
+            interval,
+            count,
+            priority,
+            currentCount: 0,
+            nextTime: startTime
+        });
+        
+        // 첫 번째 이벤트 스케줄
+        this.schedule(startTime, type, { ...data, repeatingId }, priority);
+        
+        return repeatingId;
+    }
+    
+    /**
+     * 반복 이벤트 취소
+     * @param {number} repeatingId
+     */
+    cancelRepeating(repeatingId) {
+        this.repeatingEvents.delete(repeatingId);
     }
     
     /**
@@ -102,6 +139,28 @@ class TimeManager {
                 ...event,
                 data: eventData
             });
+            
+            // 반복 이벤트 처리
+            if (event.data.repeatingId) {
+                const repeating = this.repeatingEvents.get(event.data.repeatingId);
+                if (repeating) {
+                    repeating.currentCount++;
+                    
+                    if (repeating.currentCount < repeating.count) {
+                        // 다음 반복 스케줄
+                        repeating.nextTime += repeating.interval;
+                        this.schedule(
+                            repeating.nextTime,
+                            repeating.type,
+                            { ...repeating.data, repeatingId: event.data.repeatingId },
+                            repeating.priority
+                        );
+                    } else {
+                        // 반복 완료
+                        this.repeatingEvents.delete(event.data.repeatingId);
+                    }
+                }
+            }
         }
         
         // 모든 이벤트 처리 후 시간 업데이트
@@ -122,6 +181,14 @@ class TimeManager {
                 this.frameCallbacks.splice(index, 1);
             }
         };
+    }
+    
+    /**
+     * 현재 이벤트 시간 반환
+     * @returns {number}
+     */
+    getEventTime() {
+        return this.processingTime || this.currentTime;
     }
     
     /**
@@ -217,6 +284,7 @@ class TimeManager {
         this.processingTime = 0;
         this.running = false;
         this.eventId = 0;
+        this.repeatingEvents.clear();
     }
     
     /**
@@ -242,7 +310,9 @@ class TimeManager {
 }
 
 // 전역 노출
-window.TimeManager = TimeManager;
+if (typeof window !== 'undefined') {
+    window.TimeManager = TimeManager;
+}
 
 // 내보내기
 if (typeof module !== 'undefined' && module.exports) {
