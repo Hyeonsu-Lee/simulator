@@ -74,7 +74,7 @@ const OVERLOAD_OPTIONS = {
 // 소장품 보너스
 const COLLECTION_BONUS = {
     AR: {
-        coreBonus: 0,
+        coreBonus: 0.1704,      // 코어 대미지 17.04% 증가
         chargeRatio: 0,
         damageMultiplier: 1,
         maxAmmo: 0
@@ -82,31 +82,31 @@ const COLLECTION_BONUS = {
     SMG: {
         coreBonus: 0,
         chargeRatio: 0,
-        damageMultiplier: 1,
-        maxAmmo: 0.15
+        damageMultiplier: 1.0946,  // 최종 대미지 9.46% 증가
+        maxAmmo: 0
     },
     SR: {
-        coreBonus: 0.1,
-        chargeRatio: 0.15,
+        coreBonus: 0,
+        chargeRatio: 0.0947,       // 차지 대미지 배율 9.47% 증가
         damageMultiplier: 1,
         maxAmmo: 0
     },
     RL: {
         coreBonus: 0,
-        chargeRatio: 0.1,
-        damageMultiplier: 1.1,
+        chargeRatio: 0.0947,       // 차지 대미지 배율 9.47% 증가
+        damageMultiplier: 1,
         maxAmmo: 0
     },
     MG: {
         coreBonus: 0,
         chargeRatio: 0,
         damageMultiplier: 1,
-        maxAmmo: 0.15
+        maxAmmo: 0.095             // 최대 장탄수 9.5% 증가
     },
     SG: {
-        coreBonus: 0.15,
+        coreBonus: 0,
         chargeRatio: 0,
-        damageMultiplier: 1,
+        damageMultiplier: 1.0946,  // 최종 대미지 9.46% 증가
         maxAmmo: 0
     }
 };
