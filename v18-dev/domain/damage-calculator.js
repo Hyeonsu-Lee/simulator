@@ -52,109 +52,129 @@ class DamageCalculator {
         }
     }
     
+    
     /**
      * 대미지 계산
      */
     calculateDamage(character, charState, buffs, config) {
         const weaponType = character.baseStats.weaponType || character.weaponType;
-        const isFullCharge = weaponType === 'SR' || weaponType === 'RL';
-        
-        // 특수 공격 처리
         let totalPellets = character.baseStats.basePellets || 1;
-        let chargeMultiplier = 1;
-        
+
         if (charState.replaceAttack) {
-            // 대체 공격 적용
-            const modifiers = charState.replaceAttack.modifiers;
-            totalPellets += modifiers.pelletBonus || 0;
-            // 다른 수정사항은 버프로 처리됨
-        } else if (isFullCharge) {
-            // 풀차지 대미지 배율
-            chargeMultiplier = character.baseStats.chargeMultiplier || 2.5;
+            totalPellets = charState.replaceAttack.modifiers.pelletsPerShot || 1;
         }
-        
-        // 명중률 계산
-        const accuracy = character.baseStats.accuracy || 0;
-        const totalAccuracy = accuracy + (buffs.accuracy || 0);
-        
-        // 코어 히트율 계산
-        const spread = this.calculateSpread(weaponType, totalAccuracy);
-        const coreHitRate = this.calculateCoreHitRate(spread, config.coreSize, weaponType);
-        
-        // 펠릿당 계산
-        let totalDamage = 0;
+
+        const totalAccuracy = (buffs.accuracy || 0);
+        const spread = this.calculateSpread(weaponType, totalAccuracy, config.distance);
+        const coreHitRate = this.calculateCoreHitRate(spread, config.coreSize || 30, weaponType);
+
+        let shotDamage = 0;
         let coreHits = 0;
         let pelletsHit = 0;
-        
-        for (let i = 0; i < totalPellets; i++) {
-            const hitCore = Math.random() < coreHitRate;
-            if (hitCore) {
-                coreHits++;
-                pelletsHit++;
-            }
-        }
-        
-        // 크리티컬 판정
-        const critRate = buffs.critRate || window.CRIT_RATE;
-        const isCrit = Math.random() < critRate;
-        
-        // 기본 대미지 계산
+        let critCount = 0;
+
         const baseAtk = character.baseStats.atk;
         const weaponCoef = character.baseStats.weaponCoef;
-        
-        // 최종 공격력
-        const finalAtk = baseAtk * (1 + (buffs.atkPercent || 0) + (buffs.fixedATK || 0));
-        
-        // 기본 대미지
-        const baseDamage = finalAtk * weaponCoef * chargeMultiplier;
-        
-        // 크리티컬 대미지
-        const critMultiplier = isCrit ? (1 + (buffs.critDamage || window.CRIT_DMG)) : 1;
-        
-        // 대미지 증가 버프
-        const damageMultiplier = 1 + (buffs.damageIncrease || 0) + (buffs.partDamage || 0);
-        
-        // 우월코드 대미지
-        const eliteMultiplier = config.eliteCode === 'yes' ? (1 + (buffs.eliteDamage || 0)) : 1;
-        
-        // 소장품 보너스
+        const enemyDef = window.ENEMY_DEF || 0;
         const collectionBonus = this.getCollectionBonus(weaponType);
-        const collectionMultiplier = collectionBonus.damageMultiplier || 1;
-        
-        // 거리 보정
-        const distanceMultiplier = this.getDistanceMultiplier(weaponType, config.distance);
-        
-        // 방어력 계산
-        const defense = window.ENEMY_DEF || 0;
-        const defenseReduction = defense / (defense + finalAtk);
-        const defenseMultiplier = 1 - defenseReduction;
-        
-        // 최종 대미지 계산
-        const pelletsHitDamage = baseDamage * coreHits * critMultiplier * 
-            damageMultiplier * eliteMultiplier * collectionMultiplier * 
-            distanceMultiplier * defenseMultiplier;
-        
-        totalDamage = Math.floor(pelletsHitDamage);
-        
+
+        for (let i = 0; i < totalPellets; i++) {
+            const isCrit = Math.random() < (buffs.critRate || window.CRIT_RATE || 0.15);
+            const isCore = Math.random() < coreHitRate;
+            
+            const triggers = {
+                crit: isCrit ? 1 : 0,
+                core: isCore ? 1 : 0,
+                distance: this.hasDistanceBonus(weaponType, parseInt(config.distance)) ? 1 : 0,
+                fullburst: 0,
+                part: 0,
+                penetration: this.hasPenetration(character, charState) ? 1 : 0,
+                dot: 0,
+                defIgnore: 0,
+                charge: 0,
+                elite: config.eliteCode === 'yes' ? 1 : 0,
+                distributed: (buffs.distributedDamage || 0) > 0 ? 1 : 0
+            };
+            
+            const damage = this.calculateGeneralDamage(baseAtk, enemyDef, weaponCoef, 0, buffs, triggers, collectionBonus);
+            shotDamage += damage;
+            pelletsHit++;
+            
+            if (isCrit) critCount++;
+            if (isCore) coreHits++;
+        }
+
+        shotDamage = Math.round(shotDamage / totalPellets);
+
         return {
-            damage: totalDamage,
-            isCrit,
+            damage: shotDamage,
+            isCrit: critCount > 0,
             pelletsHit,
             coreHits,
             totalPellets
         };
     }
     
-    /**
-     * 거리 보정 계산
-     */
-    getDistanceMultiplier(weaponType, distance) {
-        const optimalDistance = window.OPTIMAL_DISTANCE[weaponType] || 3;
-        const diff = Math.abs(distance - optimalDistance);
+    calculateGeneralDamage(baseAtk, enemyDef, weaponCoef, chargeCoef, buffs, triggers, collectionBonus) {
+        const targetAtkWithBuff = baseAtk * (1 + (buffs.atkPercent || 0));
+        const totalAtk = targetAtkWithBuff + (buffs.fixedATK || 0);
         
-        // 거리별 페널티 (간단화)
-        const penalty = diff * 0.05;
-        return Math.max(0.7, 1 - penalty);
+        if (totalAtk - enemyDef < 1) return 1;
+        
+        const baseDamage = (totalAtk - enemyDef) * weaponCoef;
+        
+        const critCoreMultiplier = 1 + 
+            (triggers.crit * (0.5 + (buffs.critDamage || 0))) +
+            (triggers.core * (1.0 + (buffs.coreBonus || 0) + collectionBonus.coreBonus)) +
+            (triggers.distance * 0.3) + (buffs.distanceBonus || 0) +
+            (triggers.fullburst * 0.5);
+        
+        const damageMultiplier = 1 + 
+            (buffs.damageIncrease || 0) + 
+            (triggers.part * (buffs.partDamage || 0)) +
+            (triggers.penetration * (buffs.penetrationDamage || 0)) +
+            (triggers.dot * (buffs.dotDamage || 0)) +
+            (triggers.defIgnore * (buffs.defIgnoreDamage || 0));
+        
+        let chargeMultiplier = 1;
+        if (triggers.charge) {
+            chargeMultiplier = chargeCoef + (buffs.chargeDamage || 0);
+            chargeRatio = collectionBonus.chargeRatio + (buffs.chargeRatio || 0);
+            chargeMultiplier += chargeMultiplier * chargeRatio;
+        }
+        
+        const eliteMultiplier = triggers.elite ? (1.1 + 0.1909 + (buffs.eliteDamage || 0)) : 1;
+        
+        const receivedMultiplier = 1 + 
+            (buffs.receivedDamage || 0) + 
+            (triggers.distributed * (buffs.distributedDamage || 0));
+        
+        const finalDamage = baseDamage * critCoreMultiplier * damageMultiplier * 
+            chargeMultiplier * eliteMultiplier * receivedMultiplier * 
+            collectionBonus.damageMultiplier;
+        
+        return Math.round(finalDamage);
+    }
+
+    /**
+     * 관통 트리거
+     */
+    hasPenetration(character, charState) {
+        // 1. 스킬로 인한 일시적 관통 (우선순위 높음)
+        if (charState.replaceAttack?.modifiers?.penetration) {
+            return true;
+        }
+        
+        // 2. 캐릭터 기본 관통 속성
+        return character.baseStats.penetration || false;
+    }
+
+    /**
+     * 거리 보정 트리거
+     */
+    hasDistanceBonus(weaponType, distance) {
+        const bonusRanges = window.DISTANCE_BONUS_RANGES[weaponType];
+        return bonusRanges && bonusRanges.includes(distance);
     }
     
     /**

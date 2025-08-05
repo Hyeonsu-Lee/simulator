@@ -13,7 +13,8 @@ const CHARACTER_DATA = {
             baseAmmo: 9,
             basePellets: 10,
             attackInterval: 0.666,
-            reloadTime: 1.5
+            reloadTime: 1.5,
+            penetration: false
         },
         skills: {
             skill1: {
@@ -110,7 +111,8 @@ const CHARACTER_DATA = {
             baseAmmo: 300,
             basePellets: 1,
             attackInterval: 0.018,
-            reloadTime: 2.5
+            reloadTime: 2.5,
+            penetration: false
         },
         skills: {
             skill1: {
@@ -228,7 +230,8 @@ const CHARACTER_DATA = {
             basePellets: 1,
             attackInterval: 1.0,
             reloadTime: 2.0,
-            chargeMultiplier: 2.5
+            chargeMultiplier: 2.5,
+            penetration: false
         },
         skills: {
             skill1: {
@@ -342,7 +345,8 @@ const CHARACTER_DATA = {
             baseAmmo: 120,
             basePellets: 1,
             attackInterval: 0.04,
-            reloadTime: 1.0
+            reloadTime: 1.0,
+            penetration: false
         },
         skills: {
             skill1: {

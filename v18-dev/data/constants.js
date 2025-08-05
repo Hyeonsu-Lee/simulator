@@ -71,6 +71,16 @@ const OVERLOAD_OPTIONS = {
     }
 };
 
+const DISTANCE_BONUS_RANGES = {
+    SG: [1],           // 1단계에서만 보너스
+    SMG: [1, 2],       // 1, 2단계에서 보너스
+    AR: [2],           // 2단계에서만 보너스
+    MG: [3, 4],        // 3, 4단계에서 보너스
+    SR: [4],           // 4단계에서만 보너스
+    RL: []             // 거리 보너스 없음
+};
+
+
 // 소장품 보너스
 const COLLECTION_BONUS = {
     AR: {
@@ -134,6 +144,7 @@ window.MULTI_HIT_INTERVAL = MULTI_HIT_INTERVAL;
 window.STATE_CHECK_INTERVAL = STATE_CHECK_INTERVAL;
 window.CUBE_DATA = CUBE_DATA;
 window.OVERLOAD_OPTIONS = OVERLOAD_OPTIONS;
+window.DISTANCE_BONUS_RANGES = DISTANCE_BONUS_RANGES;
 window.COLLECTION_BONUS = COLLECTION_BONUS;
 window.WEAPON_ACCURACY_PARAMS = WEAPON_ACCURACY_PARAMS;
 
