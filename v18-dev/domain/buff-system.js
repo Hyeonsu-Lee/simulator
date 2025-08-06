@@ -3,7 +3,8 @@
 class BuffSystem {
     constructor(dependencies) {
         this.eventBus = dependencies.eventBus;
-        this.squad = dependencies.squad;
+        this.mediator = dependencies.mediator;
+        this.stateStore = dependencies.stateStore;
         this.timeManager = dependencies.timeManager;
         this.characterLoader = dependencies.characterLoader;
         
@@ -12,6 +13,7 @@ class BuffSystem {
         
         // 이벤트 구독
         this.subscribeToEvents();
+        this.registerMediatorHandlers();
     }
     
     subscribeToEvents() {
@@ -26,17 +28,26 @@ class BuffSystem {
         this.eventBus.on(Events.BUFF_DECREMENT_SHOT, (event) => this.decrementShotBuffs(event.data.characterId));
     }
     
-    getBuffStacks(characterId, buffId) {
-        const charBuffs = this.activeBuffs.get(characterId);
-        if (!charBuffs) return 0;
-        
-        let stacks = 0;
-        charBuffs.forEach((buff, key) => {
-            if (buff.buffId === buffId) {
-                stacks = buff.stacks || 1;
-            }
+    registerMediatorHandlers() {
+        // 버프 스택 조회 핸들러
+        this.mediator.registerHandler('GET_BUFF_STACKS', async (data) => {
+            const { characterId, buffId } = data;
+            const charBuffs = this.activeBuffs.get(characterId);
+            if (!charBuffs) return 0;
+            
+            let stacks = 0;
+            charBuffs.forEach((buff, key) => {
+                if (buff.buffId === buffId) {
+                    stacks = buff.stacks || 1;
+                }
+            });
+            
+            return stacks;
         });
-        return stacks;
+        this.mediator.registerHandler('GET_TOTAL_BUFFS', async (data) => {
+            const { characterId, staticBuffs = {} } = data;
+            return this.calculateTotalBuffs(characterId, staticBuffs);
+        });
     }
     
     /**
@@ -122,11 +133,11 @@ class BuffSystem {
     /**
      * 버프 계산 요청 처리
      */
-    handleBuffCalculate(event) {
+    async handleBuffCalculate(event) {
         const { characterId, requestId } = event.data;
         
         // 정적 버프 가져오기
-        const staticBuffs = this.squad.get('buffs.static') || {};
+        const staticBuffs = this.stateStore.get('buffs.static') || {};
         
         // 총 버프 계산
         const buffs = this.calculateTotalBuffs(characterId, staticBuffs);
@@ -168,12 +179,15 @@ class BuffSystem {
      * 캐릭터의 총 버프 계산
      */
     calculateTotalBuffs(characterId, staticBuffs = {}) {
+        // 기본 크리티컬 상수
+        const CRIT_RATE = 0.15;
+        const CRIT_DMG = 0.5;
         
         const buffs = {
             // 기본값
             atkPercent: 0,
-            critRate: window.CRIT_RATE,
-            critDamage: window.CRIT_DMG,
+            critRate: CRIT_RATE,
+            critDamage: CRIT_DMG,
             fixedATK: 0,
             accuracy: 0,
             damageIncrease: 0,
@@ -240,7 +254,7 @@ class BuffSystem {
     updateCharacterBuffState(characterId) {
         const buffs = this.calculateTotalBuffs(characterId);
         
-        this.squad.set(`buffs.active.${characterId}`, {
+        this.stateStore.set(`buffs.active.${characterId}`, {
             buffs: buffs,
             activeCount: this.activeBuffs.get(characterId)?.size || 0,
             lastUpdate: this.timeManager.currentTime

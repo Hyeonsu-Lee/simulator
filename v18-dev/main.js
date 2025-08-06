@@ -20,20 +20,20 @@ class SimulationController {
         console.log('[SimulationController] Setting up initial state');
         
         // 현재 설정된 스쿼드 가져오기
-        const squadMembers = this.configManager.config.squad.members;
+        const squad = this.configManager.config.squad.members;
         const targetIndex = this.configManager.config.squad.targetIndex;
         
-        console.log('[SimulationController] Squad:', squadMembers);
+        console.log('[SimulationController] Squad:', squad);
         console.log('[SimulationController] Target index:', targetIndex);
         
         // 스쿼드 상태 설정
-        this.squad.set('squad', {
-            members: squadMembers,
+        this.stateStore.set('squad', {
+            members: squad,
             targetIndex: targetIndex
         });
         
         // 전투 상태 설정
-        this.squad.set('combat', {
+        this.stateStore.set('combat', {
             time: 0,
             targetIndex: targetIndex,
             distance: this.configManager.config.simulation.distance,
@@ -47,7 +47,7 @@ class SimulationController {
         });
         
         // 버스트 상태 설정
-        this.squad.set('burst', {
+        this.stateStore.set('burst', {
             currentCycle: 0,
             burstStarted: false,
             burst1User: null,
@@ -59,13 +59,13 @@ class SimulationController {
         });
         
         // 버프 상태 설정
-        this.squad.set('buffs', {
+        this.stateStore.set('buffs', {
             static: {},
             dynamic: new Map()
         });
         
         // 각 캐릭터 초기화
-        squadMembers.forEach((characterId, index) => {
+        squad.forEach((characterId, index) => {
             if (!characterId) return;
             
             // 캐릭터 설정 가져오기
@@ -110,7 +110,7 @@ class SimulationController {
                 
                 console.log(`[SimulationController] Character state for ${characterId}:`, characterState);
                 
-                this.squad.set(`combat.characters.${characterId}`, characterState);
+                this.stateStore.set(`combat.characters.${characterId}`, characterState);
             } else {
                 console.error(`[SimulationController] Failed to create character ${characterId}`);
             }
@@ -118,7 +118,7 @@ class SimulationController {
         
         // 전체 combat 상태 확인
         console.log('[SimulationController] Combat state after initialization:', 
-            this.squad.get('combat'));
+            this.stateStore.get('combat'));
     }
     
     /**
@@ -228,10 +228,10 @@ class SimulationController {
      */
     resetSystems() {
         this.timeManager.reset();
-        this.squad.reset();
+        this.stateStore.reset();
         
         // 전투 상태 초기화
-        this.squad.set('combat', {
+        this.stateStore.set('combat', {
             time: 0,
             targetIndex: this.configManager.config.squad.targetIndex,
             distance: this.configManager.config.simulation.distance,
@@ -245,7 +245,7 @@ class SimulationController {
         });
         
         // 버스트 상태 초기화
-        this.squad.set('burst', {
+        this.stateStore.set('burst', {
             currentCycle: 0,
             burstStarted: false,
             burst1User: null,
@@ -256,7 +256,7 @@ class SimulationController {
         });
         
         // 버프 상태 초기화
-        this.squad.set('buffs', {
+        this.stateStore.set('buffs', {
             static: {},
             dynamic: new Map()
         });
@@ -268,8 +268,8 @@ class SimulationController {
     collectResults() {
         const targetIndex = this.configManager.config.squad.targetIndex;
         const targetId = this.configManager.config.squad.members[targetIndex];
-        const targetState = this.squad.get(`combat.characters.${targetId}`);
-        const combat = this.squad.get('combat');
+        const targetState = this.stateStore.get(`combat.characters.${targetId}`);
+        const combat = this.stateStore.get('combat');
         
         return {
             time: combat.time,
@@ -371,7 +371,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
         
         // 5. 코어 시스템 초기화
-        const squad = new Squad(initialState);
+        const stateStore = new StateStore(initialState);
         const timeManager = new TimeManager({ eventBus });
         const logger = new Logger({ eventBus });
         
@@ -395,7 +395,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const buffSystem = new BuffSystem({
             eventBus: eventBus,
             mediator,
-            squad,
+            stateStore,
             timeManager,
             characterLoader
         });
@@ -403,7 +403,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const skillSystem = new SkillSystem({
             eventBus: eventBus,
             mediator,
-            squad,
+            stateStore,
             timeManager,
             logger,
             characterLoader
@@ -412,13 +412,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         const combatSystem = new CombatSystem({
             eventBus: eventBus,
             mediator,
-            squad,
+            stateStore,
             timeManager,
             logger,
             characterLoader,
-            configManager,
-            buffSystem,         // 추가
-            damageCalculator    // 추가
+            configManager
         });
         
         // 9. UI 시스템 생성 (의존성 주입)
@@ -426,7 +424,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         const uiController = new UIController({
             eventBus: eventBus,
-            squad,
+            stateStore,
             characterLoader,
             configManager,
             logger
@@ -436,7 +434,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const simulationController = new SimulationController({
             eventBus: eventBus,
             mediator,
-            squad,
+            stateStore,
             timeManager,
             logger,
             characterLoader,
@@ -452,7 +450,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 11. 의존성 컨테이너에 등록
         container.register('eventBus', eventBus);
         container.register('mediator', mediator);
-        container.register('squad', squad);
+        container.register('stateStore', stateStore);
         container.register('timeManager', timeManager);
         container.register('logger', logger);
         container.register('characterLoader', characterLoader);

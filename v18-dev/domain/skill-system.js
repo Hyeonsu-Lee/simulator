@@ -3,11 +3,11 @@
 class SkillSystem {
     constructor(dependencies) {
         this.eventBus = dependencies.eventBus;
-        this.squad = dependencies.squad;
+        this.mediator = dependencies.mediator;
+        this.stateStore = dependencies.stateStore;
         this.timeManager = dependencies.timeManager;
         this.logger = dependencies.logger;
         this.characterLoader = dependencies.characterLoader;
-        this.buffSystem = dependencies.buffSystem;  // 추가
         
         this.registeredSkills = new Map();
         this.triggerHandlers = new Map();
@@ -68,9 +68,9 @@ class SkillSystem {
      * 초기화
      */
     initialize() {
-        const squadMembers = this.squad.get('squad.members');
+        const squad = this.stateStore.get('squad.members');
         
-        squadMembers.forEach(characterId => {
+        squad.forEach(characterId => {
             if (!characterId) return;
             
             const character = this.characterLoader.getSpec(characterId);
@@ -291,7 +291,7 @@ class SkillSystem {
         
         // 스킬1 카운트 증가
         if (skillSlot === 'skill1') {
-            this.squad.update(state => {
+            this.stateStore.update(state => {
                 const charState = state.combat.characters[characterId];
                 if (charState) {
                     charState.skill1Count = (charState.skill1Count || 0) + 1;
@@ -304,14 +304,14 @@ class SkillSystem {
     /**
      * 효과 처리
      */
-    processEffect(sourceId, effect, context) {
+    async processEffect(sourceId, effect, context) {
         switch (effect.type) {
             case 'buff':
-                this.processBuff(sourceId, effect, context);
+                await this.processBuff(sourceId, effect, context);
                 break;
                 
             case 'stack':
-                this.processStack(sourceId, effect, context);
+                await this.processStack(sourceId, effect, context);
                 break;
                 
             case 'replace_attack':
@@ -319,7 +319,7 @@ class SkillSystem {
                 break;
                 
             case 'instant_damage':
-                this.processInstantDamage(sourceId, effect, context);
+                await this.processInstantDamage(sourceId, effect, context);
                 break;
                 
             case 'multi_hit_damage':
@@ -343,7 +343,7 @@ class SkillSystem {
                 break;
                 
             case 'transform_buff':
-                this.processBuffTransform(sourceId, effect, context);
+                await this.processBuffTransform(sourceId, effect, context);
                 break;
         }
     }
@@ -351,7 +351,7 @@ class SkillSystem {
     /**
      * 버프 처리
      */
-    processBuff(sourceId, effect, context) {
+    async processBuff(sourceId, effect, context) {
         const targets = this.resolveTargets(effect.target, sourceId);
         
         targets.forEach(target => {
@@ -369,7 +369,7 @@ class SkillSystem {
     /**
      * 스택 처리
      */
-    processStack(sourceId, effect, context) {
+    async processStack(sourceId, effect, context) {
         // 스택 버프는 BuffSystem에서 처리
         this.eventBus.emit(Events.BUFF_APPLY, {
             buffId: effect.buffId,
@@ -384,10 +384,10 @@ class SkillSystem {
         
         // 최대 스택 도달 시 효과
         if (effect.onMaxStacks) {
-            const currentStacks = this.getBuffStacks(sourceId, effect.buffId);
+            const currentStacks = await this.getBuffStacks(sourceId, effect.buffId);
             if (currentStacks >= (effect.maxStacks || 20)) {
                 for (const maxEffect of effect.onMaxStacks) {
-                    this.processEffect(sourceId, maxEffect, context);
+                    await this.processEffect(sourceId, maxEffect, context);
                 }
             }
         }
@@ -397,7 +397,7 @@ class SkillSystem {
      * 공격 대체
      */
     processReplaceAttack(sourceId, effect, context) {
-        this.squad.update(state => {
+        this.stateStore.update(state => {
             const charState = state.combat.characters[sourceId];
             if (charState) {
                 charState.replaceAttack = {
@@ -414,25 +414,28 @@ class SkillSystem {
     /**
      * 즉시 대미지
      */
-    processInstantDamage(sourceId, effect, context) {
+    async processInstantDamage(sourceId, effect, context) {
         const charSpec = this.characterLoader.getSpec(sourceId);
         if (!charSpec) return;
         
-        const buffs = this.buffSystem.calculateTotalBuffs(sourceId);
-        const damage = this.calculateInstantDamage(charSpec, effect, buffs);
+        const buffs = await this.mediator.request('GET_TOTAL_BUFFS', {
+            characterId: sourceId,
+            requestId: `instant-damage-${sourceId}-${context.time}`
+        });
+        
+        const damage = await this.mediator.request('CALCULATE_INSTANT_DAMAGE', {
+            source: { id: sourceId, baseStats: charSpec.baseStats },
+            damage: effect.damage,
+            buffs: buffs
+        });
         
         this.eventBus.emit(Events.DAMAGE, {
             sourceId: sourceId,
             damage: damage,
-            type: 'instant'
+            type: 'instant',
+            skill: effect.skill,
+            time: context.time || this.timeManager.currentTime
         });
-    }
-
-    // 새로운 메소드 추가
-    calculateInstantDamage(charSpec, effect, buffs) {
-        const finalAtk = charSpec.baseStats.atk * (1 + (buffs.atkPercent || 0));
-        const baseDamage = finalAtk * effect.damage.value;
-        return Math.floor(baseDamage * (1 + (buffs.damageIncrease || 0)));
     }
     
     /**
@@ -499,13 +502,13 @@ class SkillSystem {
      * 버스트 쿨다운 감소
      */
     processBurstCooldownReduction(sourceId, effect, context) {
-        const squadMembers = this.squad.get('squad.members');
-        squadMembers.forEach(charId => {
+        const squad = this.stateStore.get('squad.members');
+        squad.forEach(charId => {
             if (!charId) return;
             
-            const cooldown = this.squad.get(`burst.cooldowns.${charId}`);
+            const cooldown = this.stateStore.get(`burst.cooldowns.${charId}`);
             if (cooldown && cooldown > this.timeManager.currentTime) {
-                this.squad.set(`burst.cooldowns.${charId}`, 
+                this.stateStore.set(`burst.cooldowns.${charId}`, 
                     Math.max(this.timeManager.currentTime, cooldown - effect.amount)
                 );
             }
@@ -515,7 +518,7 @@ class SkillSystem {
     /**
      * 버프 변환
      */
-    processBuffTransform(sourceId, effect, context) {
+    async processBuffTransform(sourceId, effect, context) {
         // BuffSystem에 변환 요청
         this.eventBus.emit(Events.BUFF_TRANSFORM, {
             targetId: sourceId,
@@ -529,22 +532,22 @@ class SkillSystem {
      * 타겟 결정
      */
     resolveTargets(targetType, sourceId) {
-        const squadMembers = this.squad.get('squad.members').filter(id => id !== null);
+        const squad = this.stateStore.get('squad.members').filter(id => id !== null);
         
         switch (targetType) {
             case 'self':
                 return [sourceId];
                 
             case 'all_allies':
-                return squadMembers;
+                return squad;
                 
             case 'burst_users':
-                const burstUsers = this.squad.get('burst.users');
-                return squadMembers.filter(charId => burstUsers.includes(charId));
+                const burstUsers = this.stateStore.get('burst.users');
+                return squad.filter(charId => burstUsers.includes(charId));
                 
             case 'non_burst_users':
-                const nonBurstUsers = this.squad.get('burst.users');
-                return squadMembers.filter(charId => !nonBurstUsers.includes(charId));
+                const nonBurstUsers = this.stateStore.get('burst.users');
+                return squad.filter(charId => !nonBurstUsers.includes(charId));
                 
             case 'enemy':
             case 'random_enemies':
@@ -563,9 +566,9 @@ class SkillSystem {
         const [scope, property] = source.split('.');
         
         if (scope === 'global') {
-            return this.squad.get(`combat.globalCounters.${property}`) || 0;
+            return this.stateStore.get(`combat.globalCounters.${property}`) || 0;
         } else if (scope === 'self') {
-            const charState = this.squad.get(`combat.characters.${characterId}`);
+            const charState = this.stateStore.get(`combat.characters.${characterId}`);
             if (!charState) return 0;
             
             switch (property) {
@@ -588,9 +591,9 @@ class SkillSystem {
         const [scope, property] = source.split('.');
         
         if (scope === 'global') {
-            this.squad.set(`combat.globalCounters.${property}`, 0);
+            this.stateStore.set(`combat.globalCounters.${property}`, 0);
         } else if (scope === 'self') {
-            this.squad.update(state => {
+            this.stateStore.update(state => {
                 const charState = state.combat.characters[characterId];
                 if (!charState) return state;
                 
@@ -616,7 +619,7 @@ class SkillSystem {
         
         switch (trigger.condition) {
             case 'isFullBurst':
-                return this.squad.get('burst.fullBurst');
+                return this.stateStore.get('burst.fullBurst');
                 
             default:
                 return false;
@@ -626,8 +629,12 @@ class SkillSystem {
     /**
      * 버프 스택 확인
      */
-    getBuffStacks(characterId, buffId) {
-        return this.buffSystem.getBuffStacks(characterId, buffId);
+    async getBuffStacks(characterId, buffId) {
+        // 미디에이터를 통해 버프 시스템에 요청
+        return await this.mediator.request('GET_BUFF_STACKS', {
+            characterId,
+            buffId
+        });
     }
     
     /**
