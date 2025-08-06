@@ -43,16 +43,16 @@ class ConfigManager {
             'squad.targetIndex': { min: 0, max: 4, type: 'number' }
         };
         
-        // stateStore와 동기화
-        this.syncWithStateStore();
+        // squad와 동기화
+        this.syncWithSquad();
     }
     
     /**
-     * stateStore와 초기 동기화
+     * squad와 초기 동기화
      */
-    syncWithStateStore() {
-        if (typeof stateStore !== 'undefined') {
-            stateStore.update(state => {
+    syncWithSquad() {
+        if (typeof squad !== 'undefined') {
+            squad.update(state => {
                 state.squad = {
                     members: [...this.config.squad.members],
                     targetIndex: this.config.squad.targetIndex
@@ -100,8 +100,8 @@ class ConfigManager {
         }
         
         // 상태 저장소 업데이트
-        if (typeof stateStore !== 'undefined') {
-            stateStore.set(`config.${path}`, value);
+        if (typeof squad !== 'undefined') {
+            squad.set(`config.${path}`, value);
         }
     }
     
@@ -152,9 +152,9 @@ class ConfigManager {
         const oldSquad = [...this.config.squad.members];
         this.config.squad.members[index] = characterId;
         
-        // stateStore 업데이트
-        if (typeof stateStore !== 'undefined') {
-            stateStore.update(state => {
+        // squad 업데이트
+        if (typeof squad !== 'undefined') {
+            squad.update(state => {
                 if (!state.squad) state.squad = { members: [], targetIndex: 0 };
                 if (!state.squad.members) state.squad.members = [null, null, null, null, null];
                 state.squad.members[index] = characterId;
@@ -187,9 +187,9 @@ class ConfigManager {
         const oldIndex = this.config.squad.targetIndex;
         this.config.squad.targetIndex = index;
         
-        // stateStore 업데이트
-        if (typeof stateStore !== 'undefined') {
-            stateStore.update(state => {
+        // squad 업데이트
+        if (typeof squad !== 'undefined') {
+            squad.update(state => {
                 if (!state.squad) state.squad = { members: [], targetIndex: 0 };
                 state.squad.targetIndex = index;
                 return state;
@@ -393,7 +393,7 @@ class ConfigManager {
             }
         };
         
-        this.syncWithStateStore();
+        this.syncWithSquad();
         
         if (typeof eventBus !== 'undefined' && typeof Events !== 'undefined') {
             eventBus.emit(Events.CONFIG_CHANGE, { reset: true });
@@ -426,7 +426,7 @@ class ConfigManager {
         // ... 검증 로직
         
         this.config = tempConfig;
-        this.syncWithStateStore();
+        this.syncWithSquad();
     }
 }
 

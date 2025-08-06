@@ -3,7 +3,7 @@
 class BuffSystem {
     constructor(dependencies) {
         this.eventBus = dependencies.eventBus;
-        this.stateStore = dependencies.stateStore;
+        this.squad = dependencies.squad;
         this.timeManager = dependencies.timeManager;
         this.characterLoader = dependencies.characterLoader;
         
@@ -126,7 +126,7 @@ class BuffSystem {
         const { characterId, requestId } = event.data;
         
         // 정적 버프 가져오기
-        const staticBuffs = this.stateStore.get('buffs.static') || {};
+        const staticBuffs = this.squad.get('buffs.static') || {};
         
         // 총 버프 계산
         const buffs = this.calculateTotalBuffs(characterId, staticBuffs);
@@ -240,7 +240,7 @@ class BuffSystem {
     updateCharacterBuffState(characterId) {
         const buffs = this.calculateTotalBuffs(characterId);
         
-        this.stateStore.set(`buffs.active.${characterId}`, {
+        this.squad.set(`buffs.active.${characterId}`, {
             buffs: buffs,
             activeCount: this.activeBuffs.get(characterId)?.size || 0,
             lastUpdate: this.timeManager.currentTime

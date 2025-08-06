@@ -4,7 +4,7 @@ class UIController {
     constructor(dependencies = {}) {
         // 의존성 주입
         this.eventBus = dependencies.eventBus;
-        this.stateStore = dependencies.stateStore;
+        this.squad = dependencies.squad;
         this.characterLoader = dependencies.characterLoader;
         this.configManager = dependencies.configManager;
         this.logger = dependencies.logger;
@@ -231,11 +231,11 @@ class UIController {
                 
                 console.log(`[UIController] Squad slot ${i} changed to:`, characterId || 'empty');
                 
-                // ConfigManager와 StateStore 모두 업데이트
+                // ConfigManager와 Squad 모두 업데이트
                 this.configManager.setSquadMember(i, characterId || null);
                 
-                // StateStore 직접 업데이트 (추가 보장)
-                this.stateStore.update(state => {
+                // Squad 직접 업데이트 (추가 보장)
+                this.squad.update(state => {
                     if (!state.squad) state.squad = { members: [null, null, null, null, null], targetIndex: 0 };
                     state.squad.members[i] = characterId || null;
                     return state;
@@ -260,7 +260,7 @@ class UIController {
                 }
                 
                 // 디버그 로그
-                console.log('[UIController] Current squad state:', this.stateStore.get('squad'));
+                console.log('[UIController] Current squad state:', this.squad.get('squad'));
             });
         }
         
@@ -271,8 +271,8 @@ class UIController {
             
             this.configManager.setTargetIndex(index);
             
-            // StateStore 직접 업데이트 (추가 보장)
-            this.stateStore.update(state => {
+            // Squad 직접 업데이트 (추가 보장)
+            this.squad.update(state => {
                 if (!state.squad) state.squad = { members: [null, null, null, null, null], targetIndex: 0 };
                 state.squad.targetIndex = index;
                 return state;
@@ -510,7 +510,7 @@ class UIController {
     handleStart() {
         // 현재 상태 디버그
         console.log('[UIController] Starting simulation with state:', {
-            squad: this.stateStore.get('squad'),
+            squad: this.squad.get('squad'),
             config: this.configManager.config.squad
         });
         

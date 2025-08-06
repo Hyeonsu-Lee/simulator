@@ -1,6 +1,6 @@
 // core/state-store.js - 불변 상태 저장소 (개선된 버전)
 
-class StateStore {
+class Squad {
     constructor(initialState = {}) {
         this._state = this.deepFreeze(initialState);
         this._subscribers = new Set();
@@ -280,5 +280,5 @@ const initialState = {
 };
 
 // 전역 노출
-window.StateStore = StateStore;
+window.Squad = Squad;
 window.initialState = initialState;

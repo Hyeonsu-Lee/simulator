@@ -3,7 +3,7 @@
 class SkillSystem {
     constructor(dependencies) {
         this.eventBus = dependencies.eventBus;
-        this.stateStore = dependencies.stateStore;
+        this.squad = dependencies.squad;
         this.timeManager = dependencies.timeManager;
         this.logger = dependencies.logger;
         this.characterLoader = dependencies.characterLoader;
@@ -68,9 +68,9 @@ class SkillSystem {
      * 초기화
      */
     initialize() {
-        const squad = this.stateStore.get('squad.members');
+        const squadMembers = this.squad.get('squad.members');
         
-        squad.forEach(characterId => {
+        squadMembers.forEach(characterId => {
             if (!characterId) return;
             
             const character = this.characterLoader.getSpec(characterId);
@@ -291,7 +291,7 @@ class SkillSystem {
         
         // 스킬1 카운트 증가
         if (skillSlot === 'skill1') {
-            this.stateStore.update(state => {
+            this.squad.update(state => {
                 const charState = state.combat.characters[characterId];
                 if (charState) {
                     charState.skill1Count = (charState.skill1Count || 0) + 1;
@@ -397,7 +397,7 @@ class SkillSystem {
      * 공격 대체
      */
     processReplaceAttack(sourceId, effect, context) {
-        this.stateStore.update(state => {
+        this.squad.update(state => {
             const charState = state.combat.characters[sourceId];
             if (charState) {
                 charState.replaceAttack = {
@@ -499,13 +499,13 @@ class SkillSystem {
      * 버스트 쿨다운 감소
      */
     processBurstCooldownReduction(sourceId, effect, context) {
-        const squad = this.stateStore.get('squad.members');
-        squad.forEach(charId => {
+        const squadMembers = this.squad.get('squad.members');
+        squadMembers.forEach(charId => {
             if (!charId) return;
             
-            const cooldown = this.stateStore.get(`burst.cooldowns.${charId}`);
+            const cooldown = this.squad.get(`burst.cooldowns.${charId}`);
             if (cooldown && cooldown > this.timeManager.currentTime) {
-                this.stateStore.set(`burst.cooldowns.${charId}`, 
+                this.squad.set(`burst.cooldowns.${charId}`, 
                     Math.max(this.timeManager.currentTime, cooldown - effect.amount)
                 );
             }
@@ -529,22 +529,22 @@ class SkillSystem {
      * 타겟 결정
      */
     resolveTargets(targetType, sourceId) {
-        const squad = this.stateStore.get('squad.members').filter(id => id !== null);
+        const squadMembers = this.squad.get('squad.members').filter(id => id !== null);
         
         switch (targetType) {
             case 'self':
                 return [sourceId];
                 
             case 'all_allies':
-                return squad;
+                return squadMembers;
                 
             case 'burst_users':
-                const burstUsers = this.stateStore.get('burst.users');
-                return squad.filter(charId => burstUsers.includes(charId));
+                const burstUsers = this.squad.get('burst.users');
+                return squadMembers.filter(charId => burstUsers.includes(charId));
                 
             case 'non_burst_users':
-                const nonBurstUsers = this.stateStore.get('burst.users');
-                return squad.filter(charId => !nonBurstUsers.includes(charId));
+                const nonBurstUsers = this.squad.get('burst.users');
+                return squadMembers.filter(charId => !nonBurstUsers.includes(charId));
                 
             case 'enemy':
             case 'random_enemies':
@@ -563,9 +563,9 @@ class SkillSystem {
         const [scope, property] = source.split('.');
         
         if (scope === 'global') {
-            return this.stateStore.get(`combat.globalCounters.${property}`) || 0;
+            return this.squad.get(`combat.globalCounters.${property}`) || 0;
         } else if (scope === 'self') {
-            const charState = this.stateStore.get(`combat.characters.${characterId}`);
+            const charState = this.squad.get(`combat.characters.${characterId}`);
             if (!charState) return 0;
             
             switch (property) {
@@ -588,9 +588,9 @@ class SkillSystem {
         const [scope, property] = source.split('.');
         
         if (scope === 'global') {
-            this.stateStore.set(`combat.globalCounters.${property}`, 0);
+            this.squad.set(`combat.globalCounters.${property}`, 0);
         } else if (scope === 'self') {
-            this.stateStore.update(state => {
+            this.squad.update(state => {
                 const charState = state.combat.characters[characterId];
                 if (!charState) return state;
                 
@@ -616,7 +616,7 @@ class SkillSystem {
         
         switch (trigger.condition) {
             case 'isFullBurst':
-                return this.stateStore.get('burst.fullBurst');
+                return this.squad.get('burst.fullBurst');
                 
             default:
                 return false;
