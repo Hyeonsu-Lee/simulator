@@ -1,4 +1,4 @@
-// ui/ui-controller.js - UI 컨트롤러
+// ui/ui-controller.js - UI 컨트롤러 (수정된 버전)
 
 class UIController {
     constructor(dependencies = {}) {
@@ -11,22 +11,15 @@ class UIController {
         
         this.elements = {};
         this.initialized = false;
+        this.previousSquad = [null, null, null, null, null]; // 이전 스쿼드 상태 추적
     }
     
     /**
-     * 캐릭터 스펙 로드 대기
+     * 캐릭터 레지스트리 로드 대기
      */
-    async waitForCharacterData() {
-        // characterLoader가 로드 완료될 때까지 대기
-        let attempts = 0;
-        while (!this.characterLoader.loaded && attempts < 50) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            attempts++;
-        }
-        
-        if (!this.characterLoader.loaded) {
-            console.warn('Character data not loaded after waiting');
-        }
+    async waitForCharacterRegistry() {
+        // characterLoader가 레지스트리를 로드할 때까지 대기
+        await this.characterLoader.loadRegistry();
     }
     
     /**
@@ -35,7 +28,7 @@ class UIController {
     async initialize() {
         if (this.initialized) return;
         
-        await this.waitForCharacterData();
+        await this.waitForCharacterRegistry();
         
         this.cacheElements();
         this.setupEventListeners();
@@ -66,6 +59,7 @@ class UIController {
                     configDiv.classList.remove('hidden');
                 }
             }
+            this.previousSquad[index] = characterId; // 초기 상태 저장
         });
         
         const targetSelect = document.getElementById('targetSelect');
@@ -207,14 +201,14 @@ class UIController {
         
         container.innerHTML = html;
         
-        // 캐릭터 옵션 추가
+        // 캐릭터 옵션 추가 (레지스트리 기반)
         this.characterLoader.getAllIds().forEach(id => {
-            const spec = this.characterLoader.getSpec(id);
+            const metadata = this.characterLoader.registry.get(id);
             for (let i = 0; i < 5; i++) {
                 const select = document.getElementById(`squadSlot${i}`);
                 const option = document.createElement('option');
                 option.value = id;
-                option.textContent = spec.name;
+                option.textContent = metadata.name;
                 select.appendChild(option);
             }
         });
@@ -228,8 +222,20 @@ class UIController {
             
             select.addEventListener('change', (e) => {
                 const characterId = e.target.value;
+                const previousCharId = this.previousSquad[i];
                 
-                console.log(`[UIController] Squad slot ${i} changed to:`, characterId || 'empty');
+                console.log(`[UIController] Squad slot ${i} changed: ${previousCharId || 'empty'} → ${characterId || 'empty'}`);
+                
+                // 이전 캐릭터 언로드 (다른 슬롯에서 사용 중이 아닌 경우)
+                if (previousCharId && previousCharId !== characterId) {
+                    const stillInUse = this.configManager.config.squad.members
+                        .filter((id, idx) => idx !== i)
+                        .includes(previousCharId);
+                    
+                    if (!stillInUse) {
+                        this.characterLoader.unloadCharacter(previousCharId);
+                    }
+                }
                 
                 // ConfigManager와 StateStore 모두 업데이트
                 this.configManager.setSquadMember(i, characterId || null);
@@ -240,6 +246,9 @@ class UIController {
                     state.squad.members[i] = characterId || null;
                     return state;
                 });
+                
+                // 이전 상태 업데이트
+                this.previousSquad[i] = characterId || null;
                 
                 if (characterId) {
                     configDiv.classList.remove('hidden');
@@ -260,7 +269,7 @@ class UIController {
                 }
                 
                 // 디버그 로그
-                console.log('[UIController] Current squad state:', this.stateStore.get('squad'));
+                console.log('[UIController] Current loaded characters:', this.characterLoader.getDebugInfo());
             });
         }
         
@@ -508,17 +517,39 @@ class UIController {
      * 시작 핸들러
      */
     handleStart() {
-        // 현재 상태 디버그
-        console.log('[UIController] Starting simulation with state:', {
-            squad: this.stateStore.get('squad'),
-            config: this.configManager.config.squad
-        });
+        // 현재 선택된 캐릭터들 가져오기
+        const squad = this.configManager.config.squad.members;
+        const selectedCharacters = squad.filter(id => id !== null);
         
+        if (selectedCharacters.length === 0) {
+            alert('스쿼드에 최소 1명의 캐릭터를 선택해주세요.');
+            return;
+        }
+        
+        // 타겟 캐릭터 확인
+        const targetIndex = this.configManager.config.squad.targetIndex;
+        if (!squad[targetIndex]) {
+            alert('타겟 슬롯이 비어있습니다. 캐릭터가 있는 슬롯을 타겟으로 선택해주세요.');
+            return;
+        }
+        
+        console.log('[UIController] Starting simulation with characters:', selectedCharacters);
+        
+        // 선택된 캐릭터들 로드
+        const loadSuccess = this.characterLoader.loadSelectedCharacters(selectedCharacters);
+        
+        if (!loadSuccess) {
+            alert('캐릭터 로드에 실패했습니다. 콘솔을 확인해주세요.');
+            return;
+        }
+        
+        // 로드 성공 시 UI 상태 변경
         this.elements.startBtn.style.display = 'none';
         this.elements.stopBtn.style.display = 'inline-block';
         this.elements.progressBar.classList.remove('hidden');
         this.elements.results.classList.add('hidden');
         
+        // 시뮬레이션 시작 이벤트 발생
         if (this.eventBus) {
             this.eventBus.emit(Events.START);
         }

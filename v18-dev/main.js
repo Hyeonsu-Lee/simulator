@@ -1,4 +1,4 @@
-// main.js - v18 하이브리드 메인 진입점
+// main.js - v18 하이브리드 메인 진입점 (수정된 버전)
 
 class SimulationController {
     constructor(dependencies = {}) {
@@ -64,9 +64,15 @@ class SimulationController {
             dynamic: new Map()
         });
         
-        // 각 캐릭터 초기화
+        // 각 캐릭터 초기화 (로드된 캐릭터만)
         squad.forEach((characterId, index) => {
             if (!characterId) return;
+            
+            // 로드된 캐릭터인지 확인
+            if (!this.characterLoader.isLoaded(characterId)) {
+                console.warn(`[SimulationController] Character ${characterId} not loaded, skipping`);
+                return;
+            }
             
             // 캐릭터 설정 가져오기
             const charConfig = this.configManager.config.characters[characterId] || {
@@ -380,8 +386,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const characterLoader = new CharacterLoader();
         const configManager = new ConfigManager();
         
-        // 캐릭터 데이터 로드
-        await characterLoader.loadAll();
+        // 캐릭터 레지스트리만 로드 (개별 파일은 로드하지 않음)
+        await characterLoader.loadRegistry();
         
         // 7. 미디에이터 초기화
         const mediator = new EventMediator(eventBus);

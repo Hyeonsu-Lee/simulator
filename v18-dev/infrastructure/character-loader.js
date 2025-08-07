@@ -1,43 +1,34 @@
-// infrastructure/character-loader.js - 캐릭터 데이터 로더
+// infrastructure/character-loader.js - 캐릭터 데이터 로더 (개선된 버전)
 
 class CharacterLoader {
     constructor() {
         this.registry = new Map();        // 메타데이터 (id, name)
-        this.pendingLoads = new Set();    // 로드 예정 목록
-        this.loadedCharacters = new Map(); // 실제 로드된 캐릭터 데이터
-        this.loaded = false;              // 레지스트리 로드 완료 여부
+        this.loadedCharacters = new Map(); // 로드된 캐릭터 데이터
+        this.registryLoaded = false;      // 레지스트리 로드 완료 여부
     }
     
     /**
-     * 레지스트리 및 캐릭터 파일 로드
+     * 레지스트리만 로드 (초기화 시)
      */
-    async loadAll() {
-        if (this.loaded) return;
+    async loadRegistry() {
+        if (this.registryLoaded) return;
         
         try {
-            // 1. character-registry.js 동적 로드
-            await this.loadRegistry();
-            
-            // 2. 모든 캐릭터 파일 로드 대기
-            await this.waitForAllCharacters();
-            
-            console.log(`Loaded ${this.registry.size} characters`);
-            this.loaded = true;
-            
+            await this.loadRegistryFile();
+            console.log(`Character registry loaded: ${this.registry.size} characters`);
+            this.registryLoaded = true;
         } catch (error) {
-            console.error('Failed to load characters:', error);
-            this.loadBuiltInSpecs();
-            this.loaded = true;
+            console.error('Failed to load character registry:', error);
+            throw error;
         }
     }
     
     /**
      * 레지스트리 파일 로드
      */
-    loadRegistry() {
+    loadRegistryFile() {
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            // 상대 경로 수정 (현재 페이지 기준)
             script.src = './data/characters/character-registry.js';
             
             script.onload = () => {
@@ -46,7 +37,6 @@ class CharacterLoader {
                     CHARACTER_REGISTRY.forEach(char => {
                         this.registry.set(char.id, char);
                     });
-                    console.log('Character registry loaded');
                     resolve();
                 } else {
                     reject(new Error('CHARACTER_REGISTRY not found'));
@@ -54,7 +44,6 @@ class CharacterLoader {
             };
             
             script.onerror = () => {
-                console.error('Failed to load character-registry.js from:', script.src);
                 reject(new Error('Failed to load character-registry.js'));
             };
             
@@ -63,87 +52,25 @@ class CharacterLoader {
     }
     
     /**
-     * 모든 캐릭터 파일 로드 대기
+     * 선택된 캐릭터들 로드 (시뮬레이션 시작 시)
+     * @param {string[]} characterIds - 로드할 캐릭터 ID 배열
+     * @returns {boolean} 성공 여부
      */
-    async waitForAllCharacters() {
-        const maxAttempts = 50; // 최대 5초 대기
-        let attempts = 0;
+    loadSelectedCharacters(characterIds) {
+        console.log('[CharacterLoader] Loading characters:', characterIds);
         
-        while (attempts < maxAttempts) {
-            const allLoaded = Array.from(this.registry.keys()).every(charId => {
-                const globalVarName = `${charId.toUpperCase()}_CHARACTER`;
-                return typeof window[globalVarName] !== 'undefined';
-            });
-            
-            if (allLoaded) {
-                // 모든 캐릭터 로드 완료
-                console.log('All character files loaded');
-                return;
-            }
-            
-            // 100ms 대기
-            await new Promise(resolve => setTimeout(resolve, 100));
-            attempts++;
-        }
+        // 중복 제거
+        const uniqueIds = [...new Set(characterIds.filter(id => id))];
         
-        // 타임아웃 - 로드된 것만 사용
-        console.warn('Timeout waiting for character files, using loaded ones');
-    }
-    
-    /**
-     * 내장 스펙 로드 (폴백)
-     */
-    loadBuiltInSpecs() {
-        // 최소한의 폴백 데이터
-        const fallbackRegistry = [
-            { id: "dorothy", name: "도로시" }
-        ];
-        
-        fallbackRegistry.forEach(char => {
-            this.registry.set(char.id, char);
-        });
-        
-        // 폴백 캐릭터 데이터도 설정
-        if (!window.DOROTHY_CHARACTER) {
-            window.DOROTHY_CHARACTER = {
-                id: "dorothy",
-                name: "도로시",
-                weaponType: "SG",
-                burstPosition: 3,
-                burstCooldown: 40,
-                baseStats: {
-                    atk: 350254,
-                    weaponCoef: 2.015,
-                    baseAmmo: 9,
-                    basePellets: 10,
-                    attackInterval: 0.666,
-                    reloadTime: 1.5,
-                    chargeMultiplier: 0,
-                    penetration: false
-                },
-                skills: {}
-            };
-        }
-        
-        console.log('Loaded fallback character specs');
-    }
-    
-    /**
-     * 선택된 캐릭터 로드 (시뮬레이션 시작 시)
-     */
-    loadSelectedCharacters() {
-        const errors = [];
-        
-        // 중복 제거된 pendingLoads를 순회
-        this.pendingLoads.forEach(charId => {
+        for (const charId of uniqueIds) {
             // 이미 로드된 경우 스킵
             if (this.loadedCharacters.has(charId)) {
-                console.log(`Character ${charId} already loaded, skipping`);
-                return;
+                console.log(`[CharacterLoader] ${charId} already loaded, skipping`);
+                continue;
             }
             
             try {
-                // 캐릭터 데이터 로드 시도
+                // 캐릭터 데이터 로드 (동기적)
                 const charData = this.loadCharacterData(charId);
                 
                 // 데이터 검증
@@ -151,40 +78,38 @@ class CharacterLoader {
                 
                 // 로드 성공
                 this.loadedCharacters.set(charId, charData);
-                console.log(`Loaded character ${charId} successfully`);
+                console.log(`[CharacterLoader] Loaded ${charId} successfully`);
                 
             } catch (error) {
-                console.error(`Failed to load character ${charId}:`, error);
-                errors.push({
-                    characterId: charId,
-                    error: error.message
-                });
+                console.error(`[CharacterLoader] Failed to load ${charId}:`, error.message);
+                return false; // 하나라도 실패하면 false 반환
             }
-        });
-        
-        // 에러가 있으면 시뮬레이션 중단
-        if (errors.length > 0) {
-            const errorMessage = errors.map(e => 
-                `${e.characterId}: ${e.error}`
-            ).join('\n');
-            
-            alert(`캐릭터 로드 실패:\n${errorMessage}`);
-            throw new Error('Character loading failed');
         }
+        
+        return true; // 모두 성공
     }
     
     /**
-     * 개별 캐릭터 데이터 로드
+     * 개별 캐릭터 데이터 로드 (동기적)
      */
     loadCharacterData(characterId) {
         // 전역 변수명 규칙: CHARACTERID_CHARACTER
         const globalVarName = `${characterId.toUpperCase()}_CHARACTER`;
         
-        if (typeof window[globalVarName] !== 'undefined') {
-            return window[globalVarName];
+        if (typeof window[globalVarName] === 'undefined') {
+            // 파일이 아직 로드되지 않았을 수 있으므로 동기적 로드 시도
+            const script = document.createElement('script');
+            script.src = `./data/characters/${characterId}.js`;
+            script.async = false; // 동기적 로드
+            document.head.appendChild(script);
+            
+            // 다시 확인
+            if (typeof window[globalVarName] === 'undefined') {
+                throw new Error(`Character data not found: ${globalVarName}`);
+            }
         }
         
-        throw new Error(`Character data not found: ${characterId}`);
+        return window[globalVarName];
     }
     
     /**
@@ -216,64 +141,22 @@ class CharacterLoader {
     }
     
     /**
-     * 펜딩 목록에 추가
+     * 캐릭터 언로드
+     * @param {string} characterId 
      */
-    addPending(characterId) {
-        if (!characterId) return;
-        
-        // 레지스트리에 있는지 확인
-        if (!this.registry.has(characterId)) {
-            console.warn(`Character ${characterId} not in registry`);
-            return;
-        }
-        
-        this.pendingLoads.add(characterId);
-        console.log(`Added ${characterId} to pending loads`);
-    }
-    
-    /**
-     * 펜딩 목록에서 제거
-     */
-    removePending(characterId) {
-        this.pendingLoads.delete(characterId);
-        console.log(`Removed ${characterId} from pending loads`);
-    }
-    
-    /**
-     * 로드된 캐릭터 제거
-     */
-    removeLoaded(characterId) {
+    unloadCharacter(characterId) {
         if (this.loadedCharacters.has(characterId)) {
             this.loadedCharacters.delete(characterId);
-            console.log(`Removed loaded character data for ${characterId}`);
+            console.log(`[CharacterLoader] Unloaded ${characterId}`);
         }
-    }
-    
-    /**
-     * 펜딩 목록 초기화
-     */
-    clearPending() {
-        this.pendingLoads.clear();
     }
     
     /**
      * 캐릭터 스펙 가져오기
      */
     getSpec(characterId) {
-        // 먼저 로드된 데이터 확인
-        if (this.loadedCharacters.has(characterId)) {
-            return this.loadedCharacters.get(characterId);
-        }
-        
-        // 전역 변수에서 직접 가져오기 시도
-        try {
-            const data = this.loadCharacterData(characterId);
-            // 검증 없이 바로 반환 (UI용)
-            return data;
-        } catch (error) {
-            console.error(`Failed to get spec for ${characterId}:`, error);
-            return null;
-        }
+        // 로드된 데이터에서 가져오기
+        return this.loadedCharacters.get(characterId) || null;
     }
     
     /**
@@ -297,15 +180,29 @@ class CharacterLoader {
     }
     
     /**
+     * 로드 상태 확인
+     */
+    isLoaded(characterId) {
+        return this.loadedCharacters.has(characterId);
+    }
+    
+    /**
+     * 모든 로드된 캐릭터 언로드
+     */
+    unloadAll() {
+        this.loadedCharacters.clear();
+        console.log('[CharacterLoader] All characters unloaded');
+    }
+    
+    /**
      * 디버그 정보
      */
     getDebugInfo() {
         return {
             registrySize: this.registry.size,
-            pendingCount: this.pendingLoads.size,
             loadedCount: this.loadedCharacters.size,
-            pendingList: Array.from(this.pendingLoads),
-            loadedList: Array.from(this.loadedCharacters.keys())
+            loadedList: Array.from(this.loadedCharacters.keys()),
+            registryLoaded: this.registryLoaded
         };
     }
 }
@@ -348,6 +245,6 @@ class Character {
     }
 }
 
-// 내보내기
+// 전역 노출
 window.CharacterLoader = CharacterLoader;
 window.Character = Character;
